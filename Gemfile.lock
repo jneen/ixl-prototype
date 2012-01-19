@@ -1,0 +1,9 @@
+GEM
+  specs:
+    rltk (1.1.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rltk

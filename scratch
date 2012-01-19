@@ -1,0 +1,117 @@
+.msg1 arg1; .msg2 arg2 | each { echo $_ }
+
+# functions have a context determined at runtime, called $_
+# sort of like JS's `this`
+# python-style namespaces with multimethods
+
+import a/b/c
+
+# types
+type foo [
+  ...
+]
+
+.foo[a b c]
+
+range 1 10 | each [ puts . ]
+range 1 10 | each [ puts . ]
+range 1 20 | each [ puts . ]
+range 1 20 | each [ puts .[ + 1 . ] ]
+range 1 20 | each [ puts .[ * . . ] ]
+
+.def square [ . | * . ] # a little awkward in a simple example, but easier in larger examples
+
+set square [ shift | do [ * . . ] ]
+set square [ * . . ]
+
+
+.list[1 2 3] | each [ puts . ]
+.set[1 2 3] | contains? 2 | ? [
+  puts Yep.
+] [
+  puts Nope.
+]
+
+range 1 10 | each [ puts . ]
+file /tmp/foo.txt | each [ puts . ]
+
+expr | inspect
+
+
+class/instance/type
+
+class [Enumerable a] {
+  # optional type annotation
+  @each :: (a -> b) -> Enumerable b
+
+  @map :: (a -> b) -> Enumerable b
+}
+
+instance Enumerable List {
+  @map :: (a -> b) -> List b
+  def map { fn.
+    [] | store out
+    each { $out | push .[. | fn] }
+  }
+}
+
+type
+
+expr | b # evals expr, then calls $b in the context of the result
+expr ; .b # evals expr, switches context to $b
+
+$a | b # call b in context of $a
+
+# . is the current context, pronounced "it".
+# .foo is message passing
+.class: Object [
+  def -> [ fn => .fn: .]
+]
+
+class Function [
+  def call: args inContext: context [
+    # internal
+  ]
+]
+
+# stack-based multimethods
+#
+####################################################################
+####################################################################
+####################################################################
+
+# macros
+.list[1 2 3]
+
+# function macro
+.fn[foo bar .]
+
+# evaluation macro
+.eval[foo bar]
+# shorthand for .eval
+.[foo bar]
+
+# text
+.text[a b c]
+# shorthand
+{a b c}
+
+file /tmp/foo | mv . /tmp/bar/ | each [puts .]
+
+# variables
+set a b
+
+set a .[foo bar baz]
+
+# equivalent
+foo bar baz | set a .
+
+# usage
+quux .a
+
+set eval .macro[
+  shift | do [
+    # read: lex it, parse it, eval it
+    lex . | parse . | eval-tree .
+  ]
+]
