@@ -147,6 +147,9 @@ module Ixl
         'shift' => proc { |context, args|
           context.args.shift
         },
+        'args' => proc { |context, args|
+          context.args
+        },
         ':' => proc { |context, args|
           args.last
         },
@@ -155,6 +158,9 @@ module Ixl
         },
         'mul' => proc { |context, args|
           args.map(&:to_f).inject(&:*).to_s
+        },
+        'puts' => proc { |context, args|
+          puts args.join(' ')
         },
       })
     end
