@@ -7,6 +7,8 @@ require 'rltk/ast'
 
 module Ixl
   class Lexer < RLTK::Lexer
+    rule(/#.*?\n/) { :TERM } # comments are at EOL
+
     rule(/\[/)        { [:MACRO, 'lambda'] }
     rule(/\.\[/)      { [:MACRO, 'eval'] }
     rule(/\.(\w*)\[/) { |m| [:MACRO, m[1..-2]] }
