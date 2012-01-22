@@ -1,0 +1,9 @@
+set square [ shift | mul . . ]
+
+# these are equivalent
+
+# prefix notation (better for files)
+puts .[square 5]
+
+# postfix notation (better for the shell)
+square 5 | puts .
