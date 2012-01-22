@@ -7,57 +7,52 @@ require 'rltk/ast'
 
 module Ixl
   class Lexer < RLTK::Lexer
-    rule(/\[/)        { [:OPEN_MACRO, 'lambda'] }
-    rule(/\.\[/)      { [:OPEN_MACRO, 'eval'] }
-    rule(/\.(\w*)\[/) { |m| [:OPEN_MACRO, m[1..-2]] }
+    rule(/\[/)        { [:MACRO, 'lambda'] }
+    rule(/\.\[/)      { [:MACRO, 'eval'] }
+    rule(/\.(\w*)\[/) { |m| [:MACRO, m[1..-2]] }
     rule(/\.\w*/)     { |v| [:VAR, v[1..-1]] }
     rule(/\|/)        { :PIPE }
     rule(/\]/)        { :CLOSE }
-    rule(/;\n/)       { :TERM }
+    rule(/([;\n]\s*)+/)       { :TERM }
     rule(/\s+/)
     rule(/[^\[\]\|;\s]*/) { |s| [:STRING, s] }
   end
 
   class Parser < RLTK::Parser
     production :program do
-      clause('chain') { |c| AST::Program.new([c]) }
-      clause('program TERM chain TERM') do |p, _, c, _|
-        p.chains << c
-        p
+      clause('TERM* chain_seq TERM*') { |_, c, _| AST::Program.new(c) }
+    end
+
+    production :chain_seq do
+      clause('chain') { |c| [c] }
+      clause('chain_seq TERM+ chain') do |s, _, c|
+        s + [c]
       end
     end
 
     production :chain do
-      clause('command opt_terms') { |c, _| AST::Chain.new([c]) }
-      clause('chain PIPE command') { |ch, _, c| ch.commands << c; ch }
+      clause('command') { |c| AST::Chain.new([c]) }
+
+      # pipes are allowed to continue on the second line
+      # foo bar
+      #   | baz
+      #   | zot
+      clause('chain TERM* PIPE command') do |ch, _, _, c|
+        AST::Chain.new(ch.commands + [c])
+      end
     end
 
     production :command do
-      clause('STRING') { |x| AST::Command.new(x, []) }
-      clause('STRING expr_seq') { |x, s| AST::Command.new(x, s) }
-    end
-
-    production :expr_seq do
-      clause('expr') { |x| [x] }
-      clause('expr_seq expr') { |s, x| s << x }
+      clause('expr expr*') { |x, exprs| AST::Command.new(x, exprs) }
     end
 
     production :expr do
       clause('STRING') { |s| AST::StringNode.new(s) }
       clause('VAR') { |v| AST::Variable.new(v) }
-      clause('OPEN_MACRO program CLOSE') { |macro, body, _| AST::Macro.new(macro, body) }
+      clause('MACRO program CLOSE') { |m, b, _| AST::Macro.new(m, b) }
     end
 
-    # production(:terms) do
-    #   clause('LINE_ENDING+') { |_| [] }
-    # end
-
-    production(:opt_terms) do
-      clause('') { nil }
-      clause('opt_terms TERM') { |_,_| }
-    end
-
-    finalize
+    finalize :explain => $DEBUG
   end
 
   module AST
@@ -69,28 +64,52 @@ module Ixl
 
     class StringNode < Expression
       value :string, String
+
+      def to_s
+        string
+      end
     end
 
     class Variable < Expression
       value :name, String
+
+      def to_s
+        ".#{name}"
+      end
     end
 
     class Command < Base
-      value :command, String
+      child :command, Expression
       child :args, [Expression]
+
+      def to_s
+        "#{command} #{args.map(&:to_s).join(' ')}"
+      end
     end
 
     class Chain < Base
       child :commands, [Command]
+
+      def to_s
+        commands.join(' | ')
+      end
     end
 
     class Program < Base
       child :chains, [Chain]
+
+      def to_s
+        chains.join("\n")
+      end
     end
 
     class Macro < Expression
       value :name, String
       child :body, Program
+
+      def to_s
+        ".#{name}[#{body}]"
+      end
     end
   end
 
@@ -184,8 +203,16 @@ module Ixl
         check_callable!(macro)
         macro.call(self, node.body)
       when AST::Command
-        check_defined!(node.command)
-        cmd = self[node.command]
+        # strings as commands cause an env lookup,
+        # otherwise assumed it's a lambda
+        cmd = case node.command
+        when AST::StringNode
+          check_defined!(node.command.string)
+          self[node.command]
+        else
+          self.eval(node.command)
+        end
+
         check_callable!(cmd)
 
         cmd.call(self, node.args.map { |a| self.eval(a) })
@@ -215,22 +242,36 @@ module Ixl
     def shell(env, prompt=nil)
       print prompt if prompt
       $stdin.each do |line|
-        lexed = Lexer.lex(line)
-        # puts "LEXED:"
-        # p lexed
-
-        begin
-          $last_parsed = parsed = Parser.parse(lexed)
-          p env.eval(parsed)
-        rescue Exception => e
-          puts e
-          puts e.backtrace
-        end
-
+        eval_string(line)
         print prompt
       end
 
       puts
+    end
+
+    def eval_string(str, env=nil)
+      env ||= Environment.base.sub
+
+      if $DEBUG
+        puts "PROGRAM:"
+        puts str
+      end
+
+      lexed = Lexer.lex(str)
+
+      if $DEBUG
+        puts "LEXED:"
+        p lexed
+      end
+
+      begin
+        parsed = Parser.parse(lexed, verbose: $DEBUG)
+        p env.eval(parsed)
+      rescue Exception => e
+        puts e
+        puts e.backtrace
+      end
+
     end
   end
 end
@@ -241,6 +282,6 @@ if __FILE__ == $0
   if $stdin.tty?
     Ixl.shell(env, ':> ')
   else
-    Ixl.shell(env)
+    Ixl.eval_string($stdin.read)
   end
 end
