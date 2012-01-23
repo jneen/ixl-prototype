@@ -7,22 +7,22 @@ require 'rltk/ast'
 
 module Ixl
   class Lexer < RLTK::Lexer
-    rule(/#.*?\n/) { :TERM } # comments are at EOL
+    rule(/#.*?$/)         { :TERM } # comments are at EOL
 
-    rule(/\[/)        { [:MACRO, 'lambda'] }
-    rule(/\.\[/)      { [:MACRO, 'eval'] }
+    rule(/\[/) { [:MACRO, 'lambda'] }
+    rule(/\.\[/) { [:MACRO, 'eval'] }
     rule(/\.(\w*)\[/) { |m| [:MACRO, m[1..-2]] }
-    rule(/\.\w*/)     { |v| [:VAR, v[1..-1]] }
-    rule(/\|/)        { :PIPE }
-    rule(/\]/)        { :CLOSE }
-    rule(/([;\n]\s*)+/)       { :TERM }
-    rule(/\s+/)
+    rule(/\.\w*/) { |v| [:VAR, v[1..-1]] }
+    rule(/\|/) { :PIPE }
+    rule(/\]/) { :CLOSE }
+    rule(/\s*([;\n]\s*)+/m) { :TERM }
+    rule(/\s+/) { :WHITESPACE }
     rule(/[^\[\]\|;\s]*/) { |s| [:STRING, s] }
   end
 
   class Parser < RLTK::Parser
     production :program do
-      clause('TERM* chain_seq TERM*') { |_, c, _| AST::Program.new(c) }
+      clause('TERM* WHITESPACE* chain_seq WHITESPACE* TERM*') { |_,_,c,_,_| AST::Program.new(c) }
     end
 
     production :chain_seq do
@@ -39,13 +39,16 @@ module Ixl
       # foo bar
       #   | baz
       #   | zot
-      clause('chain TERM* PIPE command') do |ch, _, _, c|
+      clause('chain TERM* WHITESPACE* PIPE WHITESPACE* command') do |ch,_,_,_,_,c|
         AST::Chain.new(ch.commands + [c])
       end
     end
 
     production :command do
-      clause('expr expr*') { |x, exprs| AST::Command.new(x, exprs) }
+      clause('expr') { |x| AST::Command.new(x, []) }
+      clause('command WHITESPACE expr') do |c,_,x|
+        AST::Command.new(c.command, c.args + [x])
+      end
     end
 
     production :expr do

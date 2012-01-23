@@ -11,6 +11,19 @@ type foo [
   ...
 ]
 
+set Rectangle .type[
+  List String
+]
+
+.t{Enum a -> List a}
+
+.syntax[
+  token {\w+} [: WORD ]
+  token {->} [: ARROW ]
+
+  production 
+]
+
 .foo[a b c]
 
 range 1 10 | each [ puts . ]
