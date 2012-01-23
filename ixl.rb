@@ -9,12 +9,10 @@ module Ixl
   class Lexer < RLTK::Lexer
     rule(/#.*?$/)         { :TERM } # comments are at EOL
 
-    rule(/\[/) { [:MACRO, 'lambda'] }
-    rule(/\.\[/) { [:MACRO, 'eval'] }
-    rule(/\.(\w*)\[/) { |m| [:MACRO, m[1..-2]] }
-    rule(/\.\w*/) { |v| [:VAR, v[1..-1]] }
+    rule(/\[/) { :LBRACK }
+    rule(/\./) { :DOT }
     rule(/\|/) { :PIPE }
-    rule(/\]/) { :CLOSE }
+    rule(/\]/) { :RBRACK }
     rule(/\s*([;\n]\s*)+/m) { :TERM }
     rule(/\s+/) { :WHITESPACE }
     rule(/[^\[\]\|;\s]*/) { |s| [:STRING, s] }
@@ -53,8 +51,14 @@ module Ixl
 
     production :expr do
       clause('STRING') { |s| AST::StringNode.new(s) }
-      clause('VAR') { |v| AST::Variable.new(v) }
-      clause('MACRO program CLOSE') { |m, b, _| AST::Macro.new(m, b) }
+      clause('DOT STRING?') { |_, v| AST::Variable.new(v || '') }
+      clause('open_macro program RBRACK') { |m, b, _| AST::Macro.new(m, b) }
+    end
+
+    production :open_macro do
+      clause('DOT STRING LBRACK') { |_,s,_| s }
+      clause('DOT LBRACK') { |_,_| 'eval' }
+      clause('LBRACK') { |_| 'lambda' }
     end
 
     finalize :explain => $DEBUG
