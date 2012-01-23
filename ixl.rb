@@ -51,14 +51,27 @@ module Ixl
 
     production :expr do
       clause('STRING') { |s| AST::StringNode.new(s) }
-      clause('DOT STRING?') { |_, v| AST::Variable.new(v || '') }
-      clause('open_macro program RBRACK') { |m, b, _| AST::Macro.new(m, b) }
+      clause('variable') { |v| AST::Variable.new(v) }
+      clause('macro') { |m| m }
     end
 
-    production :open_macro do
-      clause('DOT STRING LBRACK') { |_,s,_| s }
-      clause('DOT LBRACK') { |_,_| 'eval' }
-      clause('LBRACK') { |_| 'lambda' }
+    production :variable do
+      clause('DOT STRING?') { |_, s| s || '' }
+    end
+
+    production :macro do
+      clause('variable? LBRACK program RBRACK') do |v,_,p,_|
+        name = case v
+        when nil # no variable token, i.e. [ ... ]
+          'lambda'
+        when '' # empty variable token, i.e. .[ ... ]
+          'eval'
+        else
+          v
+        end
+
+        AST::Macro.new(name, p)
+      end
     end
 
     finalize :explain => $DEBUG
