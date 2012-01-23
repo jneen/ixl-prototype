@@ -1,2 +1,4 @@
 # rvm
 .rvmrc
+
+/tmp/*
