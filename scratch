@@ -128,3 +128,49 @@ set eval .macro[
     lex . | parse . | eval-tree .
   ]
 ]
+
+# hash syntax #1: commands
+{ a 1; b 2; c 3 }
+{
+  a 1
+  b 2
+  c 3
+}
+
+# hash syntax #2: json
+{ a:1 b:2 c:3 }
+
+# hash syntax #3: lua
+{ a=1 b=2 c=3 }
+
+# hash syntax #4: clojure
+{ a 1 b 2 c 3 }
+
+# hash syntax #5: slashes
+set h %{ a/1 b/2 c/3 }
+puts .h/a
+puts .h/b
+puts .h/c
+get .h a
+get .h b
+get .h c
+
+# list syntax
+set l %[a b c]
+puts .l/0
+puts .l/1
+puts .l/2
+
+# set syntax - smalltalk?
+set s %<1 2 3 3>
+size s # => 3
+has? s 2 # => true
+has? s 4 # => false
+to-list s # => %[1 2 3]
+
+# quoting
+edit '.vimrc
+set foo '{.bar baz}
+set that-last-command '{set foo '{.bar baz}}
+
+
