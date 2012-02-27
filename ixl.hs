@@ -3,6 +3,30 @@
 import Control.Monad
 import Text.ParserCombinators.Parsec
 
+-- utility function for ghci
+p parser = parse parser "(passed-in)"
+
+-- ast
+
+-- expressions
+data ASTExpr = StringNode String
+             | VariableNode String
+             | SymbolNode String
+             | LambdaNode ASTProgram
+          -- | TableNode [(ASTExpr, ASTExpr)]
+          -- | ListNode [ASTExpr]
+             deriving(Show)
+
+-- compound types
+data ASTCommand = CommandNode [ASTExpr]
+                  deriving(Show)
+
+data ASTPipeChain = PipeChainNode [ASTCommand]
+                    deriving(Show)
+
+data ASTProgram = ProgramNode [ASTPipeChain]
+                  deriving(Show)
+
 -- TODO: there's probably a better way to do this
 braces = do
   char '{'
@@ -27,21 +51,23 @@ braces = do
           a <- atom
           return $ i ++ a
 
-bareword = liftM2 (:) letter (many $ noneOf " \n\t|#;")
+bareword = liftM2 (:) letter (many $ noneOf " \n\t|#;]")
 identifier = braces <|> bareword
+optIdentifier = try identifier <|> return ""
 
-stringLiteral = char '\'' >> identifier
-variable      = char '.'  >> identifier
-keyword       = char '-'  >> identifier
+stringLiteral = fmap StringNode $ char '\'' >> optIdentifier
+variable      = fmap VariableNode $ char '.'  >> optIdentifier
+keyword       = fmap SymbolNode $ char '-'  >> identifier
 
 atom = variable
    <|> stringLiteral
    <|> keyword
-   <|> bareword
+   <|> (fmap StringNode bareword)
    <?> "atomic expression"
 
-expr = atom -- <|> lambda etc.
-          <?> "expression"
+lambda = fmap LambdaNode $ between (char '[') (char ']') code
+
+expr = atom <|> lambda
 
 spacech = string "\\\n" <|> string " " <?> "space"
 whitespace = many1 spacech <?> "whitespace"
@@ -63,11 +89,15 @@ term = do
 
 terms = optWhitespace >> many term >> optWhitespace
 
-command = do
-  liftM2 (:) expr rest
+btSepBy p sep = result
   where
-    rest = do
-      try (whitespace >> command) <|> return []
+    result = do -- liftM2 (:) p rest
+      h <- p
+      t <- rest
+      return (h:t)
+    rest = (try (sep >> result)) <|> return []
+
+command = fmap CommandNode $ btSepBy expr whitespace
 
 pipe = do
   terms
@@ -75,17 +105,15 @@ pipe = do
   char '|'
   optWhitespace
 
-pipeChain = do
-  liftM2 (:) command rest
-  where rest = do
-          try (pipe >> pipeChain) <|> return []
+pipeChain = fmap PipeChainNode $ btSepBy command pipe
 
-code = sepBy pipeChain terms
+code = fmap ProgramNode $ do
+  terms
+  r <- sepBy pipeChain terms
+  terms
+  return r
 
 program = endBy eof code
-
--- utility function for ghci
-p parser = parse parser "(passed-in)"
 
 main = do
   c <- getContents
