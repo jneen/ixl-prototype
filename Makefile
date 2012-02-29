@@ -15,6 +15,13 @@ all: $(IXL_BIN)
 .PHONY: clean
 clean:
 	rm -rf $(CLEAN)
+.PHONY: run
+run: $(IXL_BIN)
+	$(IXL_BIN)
+.PHONY: console
+console:
+	ghci $(HASKELL_OPTS)
+
 
 $(IXL_BIN): $(IXL_SRC)
 	haskell-compiler $(HASKELL_OPTS) $^ -o $@ -odir $(LIB_DIR) -hidir $(LIB_DIR)
