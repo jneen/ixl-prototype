@@ -1,5 +1,6 @@
 # haskell build artifacts
 *.o
 *.hi
+bin/*
 
 /tmp/*
