@@ -1,6 +1,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 import qualified Data.DList as D
+import Data.List (intercalate)
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
 
@@ -28,7 +29,7 @@ data ASTCommand = CommandNode [ASTExpr]
 data ASTPipeChain = PipeChainNode [ASTCommand]
                     deriving(Show)
 
-data ASTProgram = ProgramNode [ASTPipeChain]
+data ASTProgram = ProgramNode { getProgramChains :: [ASTPipeChain] }
                   deriving(Show)
 
 {---- Compiling ----}
@@ -45,34 +46,36 @@ compileString parser str =
        Left e -> Left e
        Right ast -> Right $ compile ast
 
-instance AST ASTExpr where
-  scompile (NumberNode n)    = emit ["push int " ++ n]
-  scompile (StringNode s)    = emit ["push str " ++ s]
-  scompile (VariableNode "") = emit ["get_context"]
-  scompile (VariableNode v)  = emit ["lookup " ++ v]
-  scompile (LambdaNode l)    = emit ["lambda (TODO)"]
-  scompile (SubstNode s)     = emit ["subst (TODO)"]
-  scompile _ = fail "not implemented"
+compileAll l = foldl1 (>>) $ map scompile l
 
-emitMany = foldl (>>) $ return ()
+instance AST ASTExpr where
+  scompile (NumberNode n)    = emit ["int " ++ (show n)]
+  scompile (StringNode s)    = emit ["str " ++ (show s)]
+  scompile (VariableNode v)  = emit ["var " ++ (show v)]
+  scompile (LambdaNode l)    = do
+                                 emit ["(lambda"]
+                                 compileAll . getProgramChains $ l
+                                 emit [")"]
+  scompile (SubstNode s)     = do
+                                 emit ["(subst "]
+                                 compileAll . getProgramChains $ s
+                                 emit [")"]
+  scompile _ = fail "not implemented"
 
 instance AST ASTCommand where
   scompile (CommandNode c) = do
-    emitMany $ map scompile c
-    emit ["call " ++ (show $ length c)]
+    emit ["(command"]
+    compileAll c
+    emit [")"]
 
 instance AST ASTPipeChain where
   scompile (PipeChainNode pc) = do
-    emitMany $ map pipe pc
-    emit ["pipe " ++ (show $ length pc)]
-
-    where
-      pipe pc = scompile pc >> emit ["set_context"]
-
+    emit ["(pipe"]
+    compileAll pc
+    emit [")"]
 
 instance AST ASTProgram where
-  scompile (ProgramNode p) = do
-    emitMany $ map scompile p
+  scompile (ProgramNode p) = compileAll p
 
 -- TODO: there's probably a better way to do this
 dbraces :: GenParser Char st (D.DList Char)
@@ -194,4 +197,4 @@ main = do
   case parse program "(stdin)" c of
        Left e -> do putStrLn "Error parsing input:"
                     print e
-       Right r -> putStr $ unlines $ compile r
+       Right r -> putStrLn $ intercalate " " $ compile r
