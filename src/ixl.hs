@@ -90,7 +90,9 @@ dbraces = do
 
       where
         atom :: GenParser Char st (D.DList Char)
-        atom = fmap D.fromList $ many $ noneOf "{}"
+        atom = fmap D.fromList $ many $ do
+          escape <|> noneOf "{}"
+          where escape = char '\\' >> oneOf "{}\\"
 
         inner :: GenParser Char st (D.DList Char)
         inner = do

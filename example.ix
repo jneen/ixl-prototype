@@ -9,3 +9,6 @@ puts (square 5)
 square 5 | puts .
 
 set foo '{abcdef {sdflkj} {}}
+set rightBrace '{\}}
+set leftBrace '{\{}
+set backslash '{\\}
