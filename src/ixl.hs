@@ -48,7 +48,8 @@ class AST a where
 baseContext = Map.fromList [ ("add", IxlLambda ixlAdd),
                              ("mul", IxlLambda ixlMul),
                              ("empty", IxlEmpty),
-                             (":", IxlLambda ixlColon) ]
+                             (":", IxlLambda ixlColon),
+                             ("puts", IxlLambda ixlPuts) ]
 
 ixlAdd :: [IxlObject] -> IxlResult
 ixlAdd args = return $ foldl1 plus args where
@@ -60,6 +61,15 @@ ixlMul args = return $ foldl1 times args where
 
 ixlColon :: [IxlObject] -> IxlResult
 ixlColon args = return $ last args
+
+ixlPuts :: [IxlObject] -> IxlResult
+ixlPuts args = do
+  liftIO $ puts arg
+  return arg
+
+  where arg = head args
+        puts (IxlString s) = putStrLn s
+        puts (IxlInt n)    = putStrLn $ show n
 
 {---- Interpreting ----}
 
