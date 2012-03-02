@@ -1,6 +1,9 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 import qualified Data.DList as D
+import qualified Data.Map as Map
+import Data.Map ((!))
+import Control.Monad.State
 import Data.List (intercalate)
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
@@ -32,50 +35,88 @@ data ASTPipeChain = PipeChainNode [ASTCommand]
 data ASTProgram = ProgramNode { getProgramChains :: [ASTPipeChain] }
                   deriving(Show)
 
-{---- Compiling ----}
 class AST a where
   -- AST nodes can be compiled to an instruction list
-  scompile :: a -> Writer (D.DList String) ()
-  compile :: a -> [String]
-  compile = D.toList . snd . runWriter . scompile
+  -- scompile :: a -> Writer (D.DList String) ()
+  -- compile :: a -> [String]
+  -- compile = D.toList . snd . runWriter . scompile
+  -- eval :: a -> IxlContext -> IxlResult
+  eval :: a -> IxlResult
+  evalIO :: a -> IO IxlObject
+  evalIO node = evalStateT (eval node) Map.empty
+
+-- baseContext = Map.fromList [
+--   ("add", IxlLambda ixlAdd)
+-- ]
+
+{---- Interpreting ----}
+
+type IxlContext = Map.Map String IxlObject
+
+data IxlObject = IxlInt Integer
+               | IxlString String
+               | IxlList [IxlObject]
+               | IxlLambda ([IxlObject] -> IxlResult)
+
+instance Show IxlObject where
+  show (IxlLambda l) = "(lambda)"
+  show (IxlString s) = "(string " ++ show s ++ ")"
+  show (IxlList l)   = "(list " ++ show l ++ ")"
+  show (IxlInt i)    = "(int " ++ show i ++ ")"
+
+type IxlResult = StateT IxlContext IO IxlObject
+
+{---- Compiling ----}
 
 emit = tell . D.fromList
 
-compileString parser str =
+evalString parser str =
   case parse parser "(passed-in)" str of
-       Left e -> Left e
-       Right ast -> Right $ compile ast
+       Left e -> return $ IxlString (show e)
+       Right ast -> evalIO ast
 
-compileAll l = foldl1 (>>) $ map scompile l
+-- compileAll l = foldl1 (>>) $ map scompile l
 
 instance AST ASTExpr where
-  scompile (NumberNode n)    = emit ["int " ++ (show n)]
-  scompile (StringNode s)    = emit ["str " ++ (show s)]
-  scompile (VariableNode v)  = emit ["var " ++ (show v)]
-  scompile (LambdaNode l)    = do
-                                 emit ["(lambda"]
-                                 compileAll . getProgramChains $ l
-                                 emit [")"]
-  scompile (SubstNode s)     = do
-                                 emit ["(subst "]
-                                 compileAll . getProgramChains $ s
-                                 emit [")"]
-  scompile _ = fail "not implemented"
+  eval (NumberNode n) = return $ IxlInt (read n :: Integer)
+  eval (StringNode s) = return $ IxlString s
+  eval (VariableNode v) = do
+    ctx <- get
+    return (ctx ! v)
+
+  eval (LambdaNode l) = do
+    context <- get
+    return $ IxlLambda $ callLambda l context
+
+    where
+      callLambda :: ASTProgram -> IxlContext -> [IxlObject] -> IxlResult
+      callLambda prg ctx args = do
+        liftIO $ evalStateT (eval prg) (Map.insert "args" (IxlList args) ctx)
+
+  eval _ = fail "not implemented"
 
 instance AST ASTCommand where
-  scompile (CommandNode c) = do
-    emit ["(command"]
-    compileAll c
-    emit [")"]
+  eval (CommandNode c) = do
+    -- TODO: actually call a thing
+    vec <- mapM eval c
+    let (cmd:args) = vec
+    call cmd args
+
+call :: IxlObject -> [IxlObject] -> IxlResult
+call (IxlLambda l) args = l args
+call (IxlString s) args = do
+  ctx <- get
+  call (ctx ! s) args
 
 instance AST ASTPipeChain where
-  scompile (PipeChainNode pc) = do
-    emit ["(pipe"]
-    compileAll pc
-    emit [")"]
+  eval (PipeChainNode pc) = do
+    cmds <- mapM eval pc
+    return $ last cmds
 
 instance AST ASTProgram where
-  scompile (ProgramNode p) = compileAll p
+  eval (ProgramNode pr) = do
+    chains <- mapM eval pr
+    return $ last chains
 
 -- TODO: there's probably a better way to do this
 dbraces :: GenParser Char st (D.DList Char)
@@ -197,4 +238,6 @@ main = do
   case parse program "(stdin)" c of
        Left e -> do putStrLn "Error parsing input:"
                     print e
-       Right r -> putStrLn $ intercalate " " $ compile r
+       Right r -> do
+         res <- evalIO r
+         print res
