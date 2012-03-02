@@ -43,11 +43,23 @@ class AST a where
   -- eval :: a -> IxlContext -> IxlResult
   eval :: a -> IxlResult
   evalIO :: a -> IO IxlObject
-  evalIO node = evalStateT (eval node) Map.empty
+  evalIO node = evalStateT (eval node) baseContext
 
--- baseContext = Map.fromList [
---   ("add", IxlLambda ixlAdd)
--- ]
+baseContext = Map.fromList [ ("add", IxlLambda ixlAdd),
+                             ("mul", IxlLambda ixlMul),
+                             ("empty", IxlEmpty),
+                             (":", IxlLambda ixlColon) ]
+
+ixlAdd :: [IxlObject] -> IxlResult
+ixlAdd args = return $ foldl1 plus args where
+  plus (IxlInt n) (IxlInt m) = IxlInt (n + m)
+
+ixlMul :: [IxlObject] -> IxlResult
+ixlMul args = return $ foldl1 times args where
+  times (IxlInt n) (IxlInt m) = IxlInt (n * m)
+
+ixlColon :: [IxlObject] -> IxlResult
+ixlColon args = return $ last args
 
 {---- Interpreting ----}
 
@@ -57,12 +69,14 @@ data IxlObject = IxlInt Integer
                | IxlString String
                | IxlList [IxlObject]
                | IxlLambda ([IxlObject] -> IxlResult)
+               | IxlEmpty
 
 instance Show IxlObject where
   show (IxlLambda l) = "(lambda)"
   show (IxlString s) = "(string " ++ show s ++ ")"
   show (IxlList l)   = "(list " ++ show l ++ ")"
   show (IxlInt i)    = "(int " ++ show i ++ ")"
+  show IxlEmpty      = "(empty)"
 
 type IxlResult = StateT IxlContext IO IxlObject
 
@@ -91,7 +105,13 @@ instance AST ASTExpr where
     where
       callLambda :: ASTProgram -> IxlContext -> [IxlObject] -> IxlResult
       callLambda prg ctx args = do
-        liftIO $ evalStateT (eval prg) (Map.insert "args" (IxlList args) ctx)
+        liftIO $ evalStateT (eval prg) (setupArgs ctx args)
+
+      setupArgs ctx args = Map.unions [it, at, ctx] where
+        it = (Map.singleton "" x) where (x:_) = args
+        at = Map.singleton "@" (IxlList args)
+        -- TODO: set up .1, .2, etc
+        -- numbered = Map.fromList ...
 
   eval _ = fail "not implemented"
 
@@ -110,8 +130,18 @@ call (IxlString s) args = do
 
 instance AST ASTPipeChain where
   eval (PipeChainNode pc) = do
-    cmds <- mapM eval pc
+    ctx <- get
+    cmds <- mapM (pipeFragment ctx) pc
+
+    -- restore the original context
+    -- TODO: preserve .
+    put ctx
     return $ last cmds
+
+    where pipeFragment ctx command = do
+            res <- eval command
+            put $ Map.insert "" res ctx
+            return res
 
 instance AST ASTProgram where
   eval (ProgramNode pr) = do
@@ -151,7 +181,8 @@ dbraces = do
 
 braces = fmap D.toList dbraces
 
-bareword      = liftM2 (:) letter (many $ noneOf " \n\t|#;]")
+startBareword = oneOf ":*@" <|> letter
+bareword      = liftM2 (:) startBareword (many $ noneOf " \n\t|#;]")
 identifier    = braces <|> bareword
 optIdentifier = try identifier <|> return ""
 
