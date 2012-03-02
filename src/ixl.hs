@@ -98,6 +98,8 @@ instance AST ASTExpr where
     ctx <- get
     return (ctx ! v)
 
+  eval (SubstNode s) = eval s
+
   eval (LambdaNode l) = do
     context <- get
     return $ IxlLambda $ callLambda l context
