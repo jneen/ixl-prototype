@@ -38,11 +38,6 @@ data ASTProgram = ProgramNode { getProgramChains :: [ASTPipeChain] }
                   deriving(Show)
 
 class AST a where
-  -- AST nodes can be compiled to an instruction list
-  -- scompile :: a -> Writer (D.DList String) ()
-  -- compile :: a -> [String]
-  -- compile = D.toList . snd . runWriter . scompile
-  -- eval :: a -> IxlContext -> IxlResult
   eval :: a -> IxlResult
   evalIO :: a -> IO IxlObject
   evalIO node = evalStateT (eval node) baseContext
@@ -92,16 +87,10 @@ instance Show IxlObject where
 
 type IxlResult = StateT IxlContext IO IxlObject
 
-{---- Compiling ----}
-
-emit = tell . D.fromList
-
 evalString parser str =
   case parse parser "(passed-in)" str of
        Left e -> return $ IxlString (show e)
        Right ast -> evalIO ast
-
--- compileAll l = foldl1 (>>) $ map scompile l
 
 instance AST ASTExpr where
   eval (NumberNode n) = return $ IxlInt (read n :: Integer)
