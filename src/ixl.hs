@@ -2,6 +2,8 @@
 
 import qualified Data.DList as D
 import qualified Data.Map as Map
+import System.Console.Readline (readline, addHistory)
+import System.Posix (queryTerminal)
 import Data.Map ((!))
 import Control.Monad.State
 import Data.List (intercalate)
@@ -276,11 +278,27 @@ program = do
 
 parseIxl = parse program
 
-main = do
+repl prompt = do
+  line <- readline prompt
+  case line of
+       Nothing -> putStrLn "\nBye!"
+       Just str -> do
+         addHistory str
+         result <- evalString program str
+         print result
+         repl prompt
+
+runInput = do
   c <- getContents
   case parse program "(stdin)" c of
        Left e -> do putStrLn "Error parsing input:"
                     print e
        Right r -> do
          res <- evalIO r
-         print res
+         return ()
+
+main = do
+  isatty <- queryTerminal 0
+  case isatty of
+       True -> repl ".> "
+       False -> runInput
