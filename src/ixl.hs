@@ -19,7 +19,7 @@ p parser = parse parser "(passed-in)"
 data ASTExpr = StringNode String
              | VariableNode String
              | SymbolNode String
-             | LambdaNode ASTProgram
+             | LambdaNode ([String], ASTProgram)
              | SubstNode ASTProgram
              | SyntaxNode ASTProgram
              | NumberNode String
@@ -101,7 +101,7 @@ instance AST ASTExpr where
 
   eval (SubstNode s) = eval s
 
-  eval (LambdaNode l) = do
+  eval (LambdaNode (namedArgs, l)) = do
     context <- get
     return $ IxlLambda $ callLambda l context
 
@@ -110,9 +110,10 @@ instance AST ASTExpr where
       callLambda prg ctx args = do
         liftIO $ evalStateT (eval prg) (setupArgs ctx args)
 
-      setupArgs ctx args = Map.unions [it, at, ctx] where
+      setupArgs ctx args = Map.unions [named, it, at, ctx] where
         it = (Map.singleton "" x) where (x:_) = args
         at = Map.singleton "@" (IxlList args)
+        named = Map.fromList $ zip namedArgs args
         -- TODO: set up .1, .2, etc
         -- numbered = Map.fromList ...
 
@@ -201,8 +202,22 @@ atom = variable
    <|> (fmap StringNode bareword)
    <?> "atomic expression"
 
-lambda = fmap LambdaNode brackets <?> "lambda"
-  where brackets = between (char '[') (char ']') code
+lambda = fmap LambdaNode lambdaBody <?> "lambda"
+  where
+    lambdaBody = do
+      char '['
+      argList <- args <?> "argument list" -- try args <|> return []
+      body <- code
+      char ']'
+      return (argList, body)
+
+    args :: GenParser Char st [String]
+    args = do
+      optWhitespace
+      list <- btSepBy (many1 letter <?> "named argument") whitespace
+      optWhitespace
+      char '>'
+      return list
 
 subst = fmap SubstNode parens <?> "substitiution"
   where parens = between (char '(') (char ')') code
