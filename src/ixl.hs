@@ -34,7 +34,7 @@ data ASTCommand = CommandNode [ASTExpr]
 data ASTPipeChain = PipeChainNode [ASTCommand]
                     deriving(Show)
 
-data ASTProgram = ProgramNode { getProgramChains :: [ASTPipeChain] }
+data ASTProgram = ProgramNode [ASTPipeChain]
                   deriving(Show)
 
 class AST a where
