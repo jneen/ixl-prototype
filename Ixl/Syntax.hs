@@ -57,8 +57,9 @@ term :: Parser Term
 term = atom <|> block <|> subst
 
 -- whitespaces and comments
-comment = char '#' >> many (noneOf "\n") >> optional (char '\n')
 inlineWhitespace = spaces
+whitespace = inlineWhitespace >> many eol
+comment = char '#' >> many (noneOf "\n") >> optional (char '\n')
 eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
 
 startBareword = oneOf ":*@" <|> alphaNum
@@ -96,7 +97,7 @@ block :: Parser Term
 block = fmap Block blockBody <?> "lambda"
   where
     blockBody = do
-      char '[' >> inlineWhitespace >> many eol
+      char '[' >> whitespace
       args <- option [] argSpec
       body <- code
       char ']' >> inlineWhitespace
@@ -106,7 +107,7 @@ block = fmap Block blockBody <?> "lambda"
     argSpec = do
       char '|' >> inlineWhitespace
       list <- many pattern
-      char '|' >> inlineWhitespace >> many eol
+      char '|' >> whitespace
       return list
 
     flagPat = fmap FlagPattern     $ char '-' >> identifier
@@ -122,13 +123,13 @@ block = fmap Block blockBody <?> "lambda"
 subst :: Parser Term
 subst = fmap Subst parens <?> "substitution"
   where parens = do
-          char '(' >> inlineWhitespace >> many eol
+          char '(' >> whitespace
           prog <- code
           char ')' >> inlineWhitespace
           return prog
 
 code :: Parser Program
-code = fmap Program $ many command << (inlineWhitespace >> many eol)
+code = fmap Program $ many command << whitespace
 
 target :: Parser Term
 target = char '@' >> inlineWhitespace >> term
