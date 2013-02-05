@@ -4,12 +4,17 @@ LIB_DIR ?= ./lib
 
 HASKELL_OPTS +=
 
-BUILD = build/
+BUILD = dist/build/
+
+BIN = $(BUILD)/ixl/ixl
 
 CLEAN += $(BUILD)
 
 .PHONY: all clean console run
 all: $(BUILD)
+
+run: $(BUILD)
+	$(BIN)
 
 clean:
 	rm -rf $(CLEAN)

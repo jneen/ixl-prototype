@@ -15,6 +15,9 @@ import Data.List (intercalate)
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
 import Control.Applicative ((<$>))
+import Data.Monoid (mempty, (<>), mconcat)
+import Data.Char (chr)
+import Numeric (readHex)
 import qualified Data.Map as Map
 
 {---- AST ----}
@@ -63,8 +66,10 @@ whitespace = inlineWhitespace >> many eol
 comment = char '#' >> many (noneOf "\n") >> optional (char '\n')
 eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
 
+barewordTerminators = " \n\t|#;])"
+
 startBareword = oneOf ":*@" <|> alphaNum
-bare          = liftM2 (:) startBareword (many $ noneOf " \n\t|#;]")
+bare          = liftM2 (:) startBareword (many $ noneOf barewordTerminators)
 auto          = braces <|> bare
 identifier    = many (alphaNum <|> oneOf "_-")
 optIdentifier = try identifier <|> return ""
@@ -78,6 +83,7 @@ typed = do
   return (type_, content)
 
 stringLiteral = fmap StringLiteral $ char '\'' >> auto
+interp        = fmap Interp        $ char '"' >> (interpBraces <|> interpBare)
 variable      = fmap Variable      $ char '$'  >> identifier
 flag          = fmap Flag          $ char '-'  >> identifier
 bareword      = fmap Bareword      $ auto
@@ -89,6 +95,7 @@ atom :: Parser Term
 atom = (variable
    <|> flag
    <|> stringLiteral
+   <|> interp
    <|> typedBareword
    <|> symbol
    <|> bareword
@@ -160,32 +167,65 @@ x << y = do { res <- x; y; return res }
 type DString = D.DList Char
 type BracesState a = (a, Integer)
 
-dbraces :: Parser DString
-dbraces = do
+makeBraces :: (Monoid a) => [(Integer, Parser a)] -> Parser a
+makeBraces config = do
   char '{'
-  countBraces ((d ""), 1)
-
+  countBraces (mempty, 1)
   where
-    counter :: (Integer, Parser String) -> BracesState DString -> Parser DString
+    -- counter :: (Monoid a) => (Integer, Parser a) -> BracesState a -> Parser a
     counter (delta, parser) (buf, count) = do
       new <- parser
-      countBraces ((buf ++ d new), (count + delta))
+      countBraces (buf <> new, count + delta)
 
-    nonBraces  = counter (0,  many1 (noneOf "{}\\"))
-    openBrace  = counter (1,  return <$> char '{')
-    closeBrace = counter (-1, return <$> char '}')
-    escape     = counter (0,  return <$> (char '\\' >> anyChar))
+    with = flip ($)
 
-    alternatives :: BracesState DString -> Parser DString
-    alternatives x = foldl1 (<|>) $ map (flip ($) x) [nonBraces, openBrace, closeBrace, escape]
+    -- alternatives :: (Monoid a) => BracesState a -> Parser a
+    alternatives st = foldl1 (<|>) $ map (with st . counter) config
 
-    countBraces :: BracesState DString -> Parser DString
+    -- countBraces :: (Monoid a) => BracesState a -> Parser a
     countBraces (s, 1) = (const s <$> char '}') <|> alternatives (s, 1)
     countBraces x = alternatives x
 
-    d = D.fromList
-    (++) = D.append
+times :: Parser a -> Integer -> Parser [a]
+times _ 0 = return []
+times p n = do
+  next <- p
+  (next:) <$> times p (n-1)
 
 braces :: Parser String
-braces = fmap D.toList dbraces
+braces = fmap D.toList $ makeBraces $ [
+  (1,  return <$> char '{'),
+  (-1, return <$> char '}'),
+  (0,  D.fromList <$> many1 (noneOf "{}")) ]
 
+interpEscape :: Parser Term
+interpEscape = StringLiteral . return <$> do
+  char '\\'
+  common <|> ch8bit <|> ch16bit <|> ch32bit <|> anyChar
+
+  where
+    common = (char 'n'  >> return '\n')
+         <|> (char 't'  >> return '\t')
+         <|> (char 'r'  >> return '\r')
+
+    hexDigitsChar i = chr . fst . head . readHex <$> times hexDigit i
+
+    ch8bit  = char 'x' >> hexDigitsChar 2
+    ch16bit = char 'u' >> hexDigitsChar 4
+    ch32bit = char 'U' >> hexDigitsChar 8
+
+interpBraces :: Parser [Term]
+interpBraces = makeBraces [
+  (1,  return . StringLiteral . return <$> char '{'),
+  (-1, return . StringLiteral . return <$> char '}'),
+  (0,  return <$> interpEscape),
+  (0,  return <$> interpDollar),
+  (0,  return . StringLiteral <$> many1 (noneOf "{}\\$")) ]
+
+interpBare :: Parser [Term]
+interpBare = many (interpDollar <|> interpEscape <|> stringComponent)
+  where
+    stringComponent = fmap StringLiteral (many1 (noneOf ('$':'\\':barewordTerminators)))
+
+interpDollar :: Parser Term
+interpDollar = char '$' >> (fmap Variable identifier <|> subst)
