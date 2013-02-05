@@ -1,12 +1,17 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Ixl.Env (
   bindingsFromList,
   makeNative,
   Type(..),
   Object(..),
   Env(..),
+  showIO,
 ) where
 
 import qualified Data.Map as Map
+import Ixl.Util (showIO, ShowIO)
 import Data.Dynamic
 import Data.IORef
 
@@ -25,13 +30,11 @@ data Object = Object {
   obj_native :: Dynamic
 }
 
-class ShowIO a where
-  showIO :: a -> IO String
-
--- instance (Show a) => ShowIO (Bindings a) where
---   showIO bindings = do
---     snapshot <- bindingsToList bindings
-
+instance (ShowIO a) => ShowIO (Bindings a) where
+  showIO bindings = do
+    list <- bindingsToList bindings
+    repr <- showIO list
+    return $ "bindingsFromList " ++ repr
 
 data Env = Env {
   env_target :: Maybe Object,

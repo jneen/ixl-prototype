@@ -7,3 +7,6 @@ library
   exposed-modules: Ixl
   build-depends: base, mtl, parsec, containers, unix, readline, dlist
 
+Executable ixl
+  Main-is:           Main.hs
+  build-depends: base, mtl, parsec, containers, unix, readline, dlist

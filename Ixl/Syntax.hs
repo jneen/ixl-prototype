@@ -14,6 +14,7 @@ import Data.Map ((!))
 import Data.List (intercalate)
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
+import Control.Applicative ((<$>))
 import qualified Data.Map as Map
 
 {---- AST ----}
@@ -57,7 +58,7 @@ term :: Parser Term
 term = atom <|> block <|> subst
 
 -- whitespaces and comments
-inlineWhitespace = spaces
+inlineWhitespace = (many $ (char '\\' >> char '\n') <|> space) >> return ()
 whitespace = inlineWhitespace >> many eol
 comment = char '#' >> many (noneOf "\n") >> optional (char '\n')
 eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
@@ -156,36 +157,34 @@ infixl 1 <<
 (<<) :: (Monad m) => m a -> m b -> m a
 x << y = do { res <- x; y; return res }
 
--- TODO: there's probably a better way to do this
-dbraces :: Parser (D.DList Char)
+type DString = D.DList Char
+type BracesState a = (a, Integer)
+
+dbraces :: Parser DString
 dbraces = do
   char '{'
-  result <- bracesInternal
-  char '}'
-  return result
+  countBraces ((d ""), 1)
 
   where
-    bracesInternal = do
-      intro <- atom
-      others <- many piece
-      return $ D.concat (intro:others)
+    counter :: (Integer, Parser String) -> BracesState DString -> Parser DString
+    counter (delta, parser) (buf, count) = do
+      new <- parser
+      countBraces ((buf ++ d new), (count + delta))
 
-      where
-        atom :: Parser (D.DList Char)
-        atom = fmap D.fromList $ many $ do
-          escape <|> noneOf "{}"
-          where escape = char '\\' >> oneOf "{}\\"
+    nonBraces  = counter (0,  many1 (noneOf "{}\\"))
+    openBrace  = counter (1,  return <$> char '{')
+    closeBrace = counter (-1, return <$> char '}')
+    escape     = counter (0,  return <$> (char '\\' >> anyChar))
 
-        inner :: Parser (D.DList Char)
-        inner = do
-          inside <- dbraces
-          return $ (D.fromList "{") `D.append` inside `D.append` (D.fromList "}")
+    alternatives :: BracesState DString -> Parser DString
+    alternatives x = foldl1 (<|>) $ map (flip ($) x) [nonBraces, openBrace, closeBrace, escape]
 
-        piece :: Parser (D.DList Char)
-        piece = do
-          i <- inner
-          a <- atom
-          return $ i `D.append` a
+    countBraces :: BracesState DString -> Parser DString
+    countBraces (s, 1) = (const s <$> char '}') <|> alternatives (s, 1)
+    countBraces x = alternatives x
+
+    d = D.fromList
+    (++) = D.append
 
 braces :: Parser String
 braces = fmap D.toList dbraces

@@ -8,7 +8,7 @@ BUILD = build/
 
 CLEAN += $(BUILD)
 
-.PHONY: all clean console
+.PHONY: all clean console run
 all: $(BUILD)
 
 clean:
