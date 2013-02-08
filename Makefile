@@ -22,5 +22,5 @@ clean:
 console:
 	cabal-dev ghci
 
-$(BUILD): Ixl/
+$(BUILD): Ixl.hs Main.hs $(shell find Ixl -name '*.hs')
 	cabal-dev install

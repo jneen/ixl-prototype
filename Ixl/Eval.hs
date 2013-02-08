@@ -2,82 +2,41 @@ module Ixl.Eval (
   evalIxl
 ) where
 
+import Ixl.Syntax as Syntax
 import Ixl.Env
-import Ixl.Syntax
-import qualified Data.Map as Map
+import Ixl.RefMap (Ref, RefMap)
+import Data.Map as Map
 import Control.Monad.State
-import Data.Map ((!))
+import Control.Applicative ((<$>))
 
-evalIxl :: String -> String -> IO IxlObject
-evalIxl source code =
-  case parseIxl source code of
-       Left e -> return $ IxlString (show e)
-       Right ast -> evalIO ast
+evalIxl :: (Evallable a) => a -> IO Value
+evalIxl = runInterpIO emptyState . eval
 
-class AST a where
-  eval :: a -> IxlResult
-  evalIO :: a -> IO IxlObject
-  evalIO node = evalStateT (eval node) baseContext
+class Evallable a where
+  eval :: a -> Interp Value
 
-instance AST ASTExpr where
-  eval (NumberNode n) = return $ IxlInt (read n :: Integer)
-  eval (StringNode s) = return $ IxlString s
-  eval (VariableNode v) = do
-    ctx <- get
-    return (ctx ! v)
+instance Evallable Syntax.Term where
+  eval (Syntax.StringLiteral s) = return (VString s)
+  eval (Symbol s) = VSymbol <$> intern s
+  eval (Subst p) = eval p
 
-  eval (SubstNode s) = eval s
+instance Evallable Syntax.Command where
+  -- TODO
+  eval c = undefined
 
-  eval (LambdaNode (namedArgs, l)) = do
-    context <- get
-    return $ IxlLambda $ callLambda l context
+instance Evallable Syntax.Program where
+  -- TODO
+  eval p = undefined
 
-    where
-      callLambda :: ASTProgram -> IxlContext -> [IxlObject] -> IxlResult
-      callLambda prg ctx args = do
-        liftIO $ evalStateT (eval prg) (setupArgs ctx args)
+intern :: String -> Interp Ref
+intern name = do
+  state <- get
+  case getSymbolRef name state of
+       Just id -> return id
+       Nothing -> do
+         let id = nextRef state
+         put $ addSymbol name id state
+         return id
 
-      setupArgs ctx args = Map.unions [named, it, at, ctx] where
-        it = case args of
-                  [] -> Map.empty
-                  (x:_) -> (Map.singleton "" x)
-
-        at = Map.singleton "@" (IxlList args)
-        named = Map.fromList $ zip namedArgs args
-        -- TODO: set up .1, .2, etc
-        -- numbered = Map.fromList ...
-
-  eval _ = fail "not implemented"
-
-instance AST ASTCommand where
-  eval (CommandNode c) = do
-    -- TODO: actually call a thing
-    vec <- mapM eval c
-    let (cmd:args) = vec
-    call cmd args
-
-call :: IxlObject -> [IxlObject] -> IxlResult
-call (IxlLambda l) args = l args
-call (IxlString s) args = do
-  ctx <- get
-  call (ctx ! s) args
-
-instance AST ASTPipeChain where
-  eval (PipeChainNode pc) = do
-    ctx <- get
-    cmds <- mapM (pipeFragment ctx) pc
-
-    -- restore the original context
-    -- TODO: preserve .
-    put ctx
-    return $ last cmds
-
-    where pipeFragment ctx command = do
-            res <- eval command
-            put $ Map.insert "" res ctx
-            return res
-
-instance AST ASTProgram where
-  eval (ProgramNode pr) = do
-    chains <- mapM eval pr
-    return $ last chains
+id2name :: Ref -> Interp (Maybe String)
+id2name id = get >>= return . getSymbolName id

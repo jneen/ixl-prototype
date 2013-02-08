@@ -7,8 +7,6 @@ module Ixl.Syntax (
   parseIxl,
 ) where
 
-import Ixl.Env
-
 import qualified Data.DList as D
 import Data.Map ((!))
 import Data.List (intercalate)
@@ -40,9 +38,9 @@ data Pattern = FlagPattern String
              deriving(Show)
 
 data Command = Command {
-                 getTarget :: Maybe Term,
-                 getTerms :: [Term],
-                 getPipe :: Maybe Command
+                 c'target :: Maybe Term,
+                 c'terms :: [Term],
+                 c'pipe :: Maybe Command
                } deriving(Show)
 
 data Program = Program [Command] deriving(Show)
@@ -68,8 +66,7 @@ eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
 
 barewordTerminators = " \n\t|#;])"
 
-startBareword = oneOf ":*@" <|> alphaNum
-bare          = liftM2 (:) startBareword (many $ noneOf barewordTerminators)
+bare          = many1 $ noneOf barewordTerminators
 auto          = braces <|> bare
 identifier    = many (alphaNum <|> oneOf "_-")
 optIdentifier = try identifier <|> return ""
@@ -160,10 +157,6 @@ command = do
   pipe <- optionMaybe pipe
   return $ Command target terms pipe
 
-infixl 1 <<
-(<<) :: (Monad m) => m a -> m b -> m a
-x << y = do { res <- x; y; return res }
-
 type DString = D.DList Char
 type BracesState a = (a, Integer)
 
@@ -228,4 +221,14 @@ interpBare = many (interpDollar <|> interpEscape <|> stringComponent)
     stringComponent = fmap StringLiteral (many1 (noneOf ('$':'\\':barewordTerminators)))
 
 interpDollar :: Parser Term
-interpDollar = char '$' >> (fmap Variable identifier <|> subst)
+interpDollar = char '$' >> (subst <|> fmap Variable identifier)
+
+consolidateInterp :: [Term] -> [Term]
+consolidateInterp ((StringLiteral s1):(StringLiteral s2):tail)
+  = consolidateInterp ((StringLiteral (s1 ++ s2)):tail)
+consolidateInterp (x:xs) = x:(consolidateInterp xs)
+consolidateInterp [] = []
+
+infixl 1 <<
+(<<) :: (Monad m) => m a -> m b -> m a
+x << y = do { res <- x; y; return res }

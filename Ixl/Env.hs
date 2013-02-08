@@ -1,119 +1,144 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Ixl.Env (
-  bindingsFromList,
-  makeNative,
-  Type(..),
-  Object(..),
-  Env(..),
-  showIO,
+  InterpState,
+  emptyState,
+  addSymbol,
+  getSymbolName,
+  getSymbolRef,
+  nextRef,
+
+  Object,
+  emptyObject,
+
+  Value(..),
+  Type,
+  typeType,
+  objectType,
+
+  Interp(..),
+  runInterpIO,
 ) where
 
+import qualified Ixl.RefMap as RefMap
+import qualified Ixl.Syntax as Syntax
+import Ixl.RefMap (RefMap, Ref(..))
+
+import Data.Maybe (fromJust)
 import qualified Data.Map as Map
-import Ixl.Util (showIO, ShowIO)
 import Data.Dynamic
-import Data.IORef
 
-{---- Interpreting ----}
+import Control.Monad.Cont
+import Control.Monad.State
 
-type Bindings a = IORef (Map.Map String (IORef a))
+data InterpState = InterpState {
+  st'internTable :: Map.Map String Ref,
+  st'reverseTable :: RefMap String,
+  st'heap :: RefMap Object,
+  st'stack :: [Frame]
+} deriving(Show)
 
-data Type = Type {
-  type_name :: String,
-  type_mixins :: [Type]
+
+emptyState :: InterpState
+emptyState = InterpState {
+  st'internTable = Map.empty,
+  st'reverseTable = RefMap.empty,
+  st'heap = RefMap.empty,
+  st'stack = []
 }
+
+addSymbol :: String -> Ref -> InterpState -> InterpState
+addSymbol str id state =
+  let forward = st'internTable state
+      reverse = st'reverseTable state
+  in state { st'internTable = Map.insert str id forward,
+             st'reverseTable = RefMap.insert id str reverse }
+
+nextRef :: InterpState -> Ref
+nextRef = Ref . Map.size . st'internTable
+
+getSymbolRef :: String -> InterpState -> Maybe Ref
+getSymbolRef s = Map.lookup s . st'internTable
+
+getSymbolName :: Ref -> InterpState -> Maybe String
+getSymbolName r = RefMap.lookup r . st'reverseTable
 
 data Object = Object {
-  obj_type :: Type,
-  obj_bindings :: Bindings Object,
-  obj_native :: Dynamic
+  o'type :: Type,
+  o'id :: Ref,
+  o'vars :: RefMap Ref,
+  o'native :: Maybe Dynamic
+} deriving(Show)
+
+-- object references and immutable types
+data Value = VObject Ref
+           | VSymbol Ref
+           | VString String
+           | VInt Int
+           | VFloat Float
+           -- | Block (RefMap Variable) Syntax.Program
+           -- deriving(Show)
+
+data Type = UnitType String | BlockType [Either String Type] Type
+            deriving(Show, Eq)
+
+objectType = UnitType "object"
+typeType = UnitType "type"
+
+emptyObject :: Object
+emptyObject = Object {
+  o'type = objectType,
+  o'id = RefMap.nullRef, -- NB: this is invalid, and must be registered!
+  o'vars = RefMap.empty,
+  o'native = Nothing
 }
 
-instance (ShowIO a) => ShowIO (Bindings a) where
-  showIO bindings = do
-    list <- bindingsToList bindings
-    repr <- showIO list
-    return $ "bindingsFromList " ++ repr
+data Frame = Frame {
+  fr'block :: Object,
+  fr'locals :: RefMap Ref,
+  fr'target :: Int
+} deriving(Show)
 
-data Env = Env {
-  env_target :: Maybe Object,
-  env_parent :: Maybe Env,
-  env_bindings :: Bindings Object,
-  env_types :: Bindings Type
-}
+type Env = [Frame]
 
-bindingsFromList :: [(String, a)] -> IO (Bindings a)
-bindingsFromList list = do
-  refs <- mapM makeBinding list
-  newIORef $ Map.fromList refs
-  where
-    makeBinding :: (String, a) -> IO (String, IORef a)
-    makeBinding (s, o) = do
-      ref <- newIORef o
-      return (s, ref)
+{-- The Interp Monad --}
 
-bindingsToList :: Bindings a -> IO [(String, a)]
-bindingsToList bindings = do
-  bindingMap <- readIORef bindings
-  let refsList = Map.toList bindingMap
-  mapM unpack refsList
-  where
-    unpack :: (String, IORef a) -> IO (String, a)
-    unpack (s, r) = do { x <- readIORef r; return (s, x) }
+type Interp = InterpT (ContT Value (StateT InterpState IO))
+newtype InterpT m a = InterpT { runInterpT :: m a }
 
-get :: Bindings a -> String -> IO (Maybe a)
-get bindings name = do
-  bindingMap <- readIORef bindings
-  case Map.lookup name bindingMap of
-       Just ref -> fmap Just $ readIORef ref
-       _ -> return Nothing
+instance MonadTrans InterpT where
+  lift = InterpT
 
-set :: Bindings a -> String -> a -> IO ()
-set bindings name val = do
-  bindingMap <- readIORef bindings
-  case Map.lookup name bindingMap of
-       Just ref -> writeIORef ref val
-       Nothing  -> do
-         ref <- newIORef val
-         let newMap = Map.insert name ref bindingMap
-         writeIORef bindings newMap
+instance Monad m => Monad (InterpT m) where
+  return = InterpT . return
+  x >>= f = InterpT $ (runInterpT x) >>= (runInterpT . f)
 
-makeNative :: (Typeable a) => Type -> a -> IO Object
-makeNative type_ native = do
-  bindings <- bindingsFromList []
-  return $ Object { obj_type = type_,
-                    obj_bindings = bindings,
-                    obj_native = toDyn native
-                  }
+instance (MonadIO m) => MonadIO (InterpT m) where
+  liftIO = InterpT . liftIO
 
-getNative :: (Typeable a) => Type -> Object -> Maybe a
-getNative type_ obj
-  | type_name (obj_type obj) /= type_name type_ = Nothing
-  | otherwise = (fromDynamic . obj_native) obj
+instance Functor m => Functor (InterpT m) where
+  fmap f (InterpT a) = InterpT (fmap f a)
 
--- baseContext = Map.fromList [ ("add", IxlLambda ixlAdd),
---                              ("mul", IxlLambda ixlMul),
---                              ("empty", IxlEmpty),
---                              (":", IxlLambda ixlColon),
---                              ("puts", IxlLambda ixlPuts) ]
--- 
--- ixlAdd :: [IxlObject] -> IxlResult
--- ixlAdd args = return $ foldl1 plus args where
---   plus (IxlInt n) (IxlInt m) = IxlInt (n + m)
--- 
--- ixlMul :: [IxlObject] -> IxlResult
--- ixlMul args = return $ foldl1 times args where
---   times (IxlInt n) (IxlInt m) = IxlInt (n * m)
--- 
--- ixlColon :: [IxlObject] -> IxlResult
--- ixlColon args = return $ last args
--- 
--- ixlPuts :: [IxlObject] -> IxlResult
--- ixlPuts args = do
---   liftIO $ puts arg
---   return arg
--- 
---   where arg = head args
---         puts (IxlString s) = putStrLn s
---         puts (IxlInt n)    = putStrLn $ show n
+-- provides `modify`
+instance MonadState InterpState Interp where
+  -- put :: InterpState -> Interp ()
+  -- put (inner) :: InterpState -> StateT InterpState IO ()
+  put = lift . lift . put
+  -- get :: Interp InterpState
+  -- get (inner) :: StateT InterpState IO InterpState
+  get = lift $ lift get
+
+instance MonadCont Interp where
+  -- callCC :: ((a -> Interp b) -> Interp a) -> Interp a
+  -- callCC (inner) ::
+  --           ((a -> ContT Value m b) -> ContT Value m a) -> ContT Value m a
+  -- f :: (a -> Interp b) -> Interp a
+  -- arg to callCC (inner) :: (a -> ContT Value m b) -> ContT Value m a
+  callCC f = lift $ callCC cc
+    where
+      cc next = runInterpT $ f (lift . next)
+
+runInterpIO :: InterpState -> Interp Value -> IO Value
+runInterpIO state evalue =
+  (`evalStateT` state) $ (`runContT` return) $ runInterpT evalue
