@@ -1,18 +1,21 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Ixl.Env (
   InterpState,
   emptyState,
   addSymbol,
-  getSymbolName,
-  getSymbolRef,
-  nextRef,
+  name2id,
+  id2name,
+  nextHeapRef,
+  nextSymbolRef,
 
   Object,
   emptyObject,
 
   Value(..),
+  typeOfValue,
   Type,
   typeType,
   objectType,
@@ -31,11 +34,12 @@ import Data.Dynamic
 
 import Control.Monad.Cont
 import Control.Monad.State
+import Control.Applicative ((<$>))
 
 data InterpState = InterpState {
   st'internTable :: Map.Map String Ref,
   st'reverseTable :: RefMap String,
-  st'heap :: RefMap Object,
+  st'heap :: RefMap Value,
   st'stack :: [Frame]
 } deriving(Show)
 
@@ -48,43 +52,75 @@ emptyState = InterpState {
   st'stack = []
 }
 
-addSymbol :: String -> Ref -> InterpState -> InterpState
-addSymbol str id state =
+addSymbol :: String -> Ref -> Interp ()
+addSymbol str id = modify $ \state ->
   let forward = st'internTable state
       reverse = st'reverseTable state
   in state { st'internTable = Map.insert str id forward,
              st'reverseTable = RefMap.insert id str reverse }
 
-nextRef :: InterpState -> Ref
-nextRef = Ref . Map.size . st'internTable
+nextSymbolRef :: Interp Ref
+nextSymbolRef = Ref . Map.size . st'internTable <$> get
 
-getSymbolRef :: String -> InterpState -> Maybe Ref
-getSymbolRef s = Map.lookup s . st'internTable
+nextHeapRef :: Interp Ref
+nextHeapRef = RefMap.next .  st'heap <$> get
 
-getSymbolName :: Ref -> InterpState -> Maybe String
-getSymbolName r = RefMap.lookup r . st'reverseTable
+name2id :: String -> InterpState -> Maybe Ref
+name2id s = Map.lookup s . st'internTable
+
+id2name :: Ref -> Interp (Maybe String)
+id2name r = RefMap.lookup r . st'reverseTable <$> get
+
+dereference :: Ref -> Interp Value
+dereference r = fromJust . RefMap.lookup r . st'heap <$> get
+
+makeBox :: Type -> Value -> Interp Value
+makeBox type_ val = do
+  id <- nextHeapRef
+  modify $ \state -> state {
+             st'heap = RefMap.insert id val (st'heap state)
+           }
+  return $ VBox (id, type_)
 
 data Object = Object {
   o'type :: Type,
   o'id :: Ref,
-  o'vars :: RefMap Ref,
+  o'vars :: RefMap Value,
   o'native :: Maybe Dynamic
 } deriving(Show)
 
--- object references and immutable types
-data Value = VObject Ref
+-- immutable Value objects
+data Value = VObject Object
            | VSymbol Ref
+           | VBox (Ref, Type)
            | VString String
            | VInt Int
            | VFloat Float
-           -- | Block (RefMap Variable) Syntax.Program
-           -- deriving(Show)
+           | VNative Dynamic
+           deriving(Show)
 
-data Type = UnitType String | BlockType [Either String Type] Type
+data Type = UnitType String
+          | BlockType [Either String Type] Type
+          | RefType Type
             deriving(Show, Eq)
 
 objectType = UnitType "object"
 typeType = UnitType "type"
+symbolType = UnitType "symbol"
+boxType = UnitType "box"
+stringType = UnitType "string"
+intType = UnitType "int"
+floatType = UnitType "float"
+nativeType = UnitType "native"
+
+typeOfValue :: Value -> Type
+typeOfValue (VObject x) = o'type x
+typeOfValue (VSymbol _) = symbolType
+typeOfValue (VBox (_, t)) = RefType t
+typeOfValue (VString _) = stringType
+typeOfValue (VInt _) = intType
+typeOfValue (VFloat _) = floatType
+typeOfValue (VNative _) = nativeType
 
 emptyObject :: Object
 emptyObject = Object {
@@ -96,7 +132,7 @@ emptyObject = Object {
 
 data Frame = Frame {
   fr'block :: Object,
-  fr'locals :: RefMap Ref,
+  fr'locals :: RefMap Value,
   fr'target :: Int
 } deriving(Show)
 
@@ -104,41 +140,18 @@ type Env = [Frame]
 
 {-- The Interp Monad --}
 
-type Interp = InterpT (ContT Value (StateT InterpState IO))
-newtype InterpT m a = InterpT { runInterpT :: m a }
-
-instance MonadTrans InterpT where
-  lift = InterpT
-
-instance Monad m => Monad (InterpT m) where
-  return = InterpT . return
-  x >>= f = InterpT $ (runInterpT x) >>= (runInterpT . f)
-
-instance (MonadIO m) => MonadIO (InterpT m) where
-  liftIO = InterpT . liftIO
-
-instance Functor m => Functor (InterpT m) where
-  fmap f (InterpT a) = InterpT (fmap f a)
-
--- provides `modify`
-instance MonadState InterpState Interp where
-  -- put :: InterpState -> Interp ()
-  -- put (inner) :: InterpState -> StateT InterpState IO ()
-  put = lift . lift . put
-  -- get :: Interp InterpState
-  -- get (inner) :: StateT InterpState IO InterpState
-  get = lift $ lift get
-
-instance MonadCont Interp where
-  -- callCC :: ((a -> Interp b) -> Interp a) -> Interp a
-  -- callCC (inner) ::
-  --           ((a -> ContT Value m b) -> ContT Value m a) -> ContT Value m a
-  -- f :: (a -> Interp b) -> Interp a
-  -- arg to callCC (inner) :: (a -> ContT Value m b) -> ContT Value m a
-  callCC f = lift $ callCC cc
-    where
-      cc next = runInterpT $ f (lift . next)
+newtype Interp a = Interp2 {
+  runInterp :: ContT Value (StateT InterpState IO) a
+} deriving(Monad,
+           Functor,
+           MonadIO,
+           MonadState InterpState,
+           MonadCont
+          )
 
 runInterpIO :: InterpState -> Interp Value -> IO Value
-runInterpIO state evalue =
-  (`evalStateT` state) $ (`runContT` return) $ runInterpT evalue
+runInterpIO state action =
+  (`evalStateT` state) $ (`runContT` return) $ runInterp action
+
+runInterpSandboxed :: Interp Value -> IO Value
+runInterpSandboxed = runInterpIO emptyState

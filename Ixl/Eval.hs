@@ -31,12 +31,9 @@ instance Evallable Syntax.Program where
 intern :: String -> Interp Ref
 intern name = do
   state <- get
-  case getSymbolRef name state of
+  case name2id name state of
        Just id -> return id
        Nothing -> do
-         let id = nextRef state
-         put $ addSymbol name id state
+         id <- nextSymbolRef
+         addSymbol name id
          return id
-
-id2name :: Ref -> Interp (Maybe String)
-id2name id = get >>= return . getSymbolName id

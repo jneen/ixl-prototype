@@ -16,3 +16,6 @@ empty = RefMap IM.empty
 
 insert :: Ref -> a -> RefMap a -> RefMap a
 insert k v = RefMap . IM.insert (r'int k) v . rm'map
+
+next :: RefMap a -> Ref
+next = Ref . IM.size . rm'map
