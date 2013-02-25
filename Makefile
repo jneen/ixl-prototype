@@ -2,8 +2,6 @@ BIN_DIR ?= ./bin
 SRC_DIR = ./src
 LIB_DIR ?= ./lib
 
-HASKELL_OPTS +=
-
 BUILD = dist/build/
 
 BIN = $(BUILD)/ixl/ixl

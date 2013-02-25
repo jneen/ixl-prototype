@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Ixl.Env (
@@ -140,7 +138,7 @@ type Env = [Frame]
 
 {-- The Interp Monad --}
 
-newtype Interp a = Interp2 {
+newtype Interp a = Interp {
   runInterp :: ContT Value (StateT InterpState IO) a
 } deriving(Monad,
            Functor,
