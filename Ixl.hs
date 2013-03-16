@@ -19,7 +19,10 @@ makeRepl interp prompt = do
          makeRepl interp prompt
 
 repl :: String -> IO ()
-repl = makeRepl $ \input -> print $ parseIxl "(repl)" input
+repl = makeRepl $ \input -> do
+  case parseIxl "(repl)" input of
+       Left error -> print error
+       Right tree -> print tree -- evalIxl tree >>= print
 
 -- runInput = do
 --   c <- getContents

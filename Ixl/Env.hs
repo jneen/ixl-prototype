@@ -95,12 +95,18 @@ data Value = VObject Object
            | VInt Int
            | VFloat Float
            | VNative Dynamic
+           | VBlock Block
            deriving(Show)
 
 data Type = UnitType String
-          | BlockType [Either String Type] Type
+          | BlockType ArgSpec Type
           | RefType Type
             deriving(Show, Eq)
+
+data Block = Block {
+  block'body :: (), -- TODO
+  block'argSpec :: ArgSpec
+} deriving(Show)
 
 objectType = UnitType "object"
 typeType = UnitType "type"
@@ -135,6 +141,11 @@ data Frame = Frame {
 } deriving(Show)
 
 type Env = [Frame]
+
+data ArgSlot = FlagSlot String
+             | VarSlot (String, Maybe Type)
+             deriving (Eq, Show)
+type ArgSpec = [ArgSlot]
 
 {-- The Interp Monad --}
 
