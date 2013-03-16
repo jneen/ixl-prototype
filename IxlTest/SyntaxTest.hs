@@ -27,3 +27,8 @@ spec = do
     it "works with a braced variable" $ do
       term (Interp [Variable "foo"]) @=?
         parseIxl "(input)" "\"${foo}"
+
+    it "disallows dollars in braces" $ do
+      case parseIxl "(input)" "\"${$foo}" of
+           Left _ -> assert True
+           _ -> assert False

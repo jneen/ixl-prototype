@@ -221,7 +221,8 @@ interpBare = many (interpDollar <|> interpEscape <|> stringComponent)
     stringComponent = fmap StringLiteral (many1 (noneOf ('$':'\\':barewordTerminators)))
 
 interpDollar :: Parser Term
-interpDollar = char '$' >> (subst <|> fmap Variable identifier)
+interpDollar = char '$' >> (subst <|> var)
+  where var = fmap Variable (between (char '{') (char '}') identifier <|> identifier)
 
 consolidateInterp :: [Term] -> [Term]
 consolidateInterp ((StringLiteral s1):(StringLiteral s2):tail)
