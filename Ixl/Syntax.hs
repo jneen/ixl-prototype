@@ -56,7 +56,7 @@ program :: Parser Program
 program = code << eof
 
 term :: Parser Term
-term = atom <|> block <|> subst
+term = block <|> subst <|> atom
 
 -- whitespaces and comments
 inlineWhitespace = (many $ (char '\\' >> char '\n') <|> space) >> return ()
