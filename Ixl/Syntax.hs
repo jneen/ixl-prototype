@@ -30,20 +30,20 @@ data Term = StringLiteral String
           | Interp [Term]
           | Block ([Pattern], Program)
           | Subst Program
-          deriving(Show)
+          deriving(Show, Eq)
 
 data Pattern = FlagPattern String
              | VariablePattern (Maybe String, String)
              | Ellipsis Pattern
-             deriving(Show)
+             deriving(Show, Eq)
 
 data Command = Command {
                  c'target :: Maybe Term,
                  c'terms :: [Term],
                  c'pipe :: Maybe Command
-               } deriving(Show)
+               } deriving(Show, Eq)
 
-data Program = Program [Command] deriving(Show)
+data Program = Program [Command] deriving(Show, Eq)
 
 {---- PARSERS ----}
 
