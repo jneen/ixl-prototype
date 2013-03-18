@@ -89,30 +89,30 @@ symbol        = fmap Symbol        $ symbolic
 
 
 atom :: Parser Term
-atom = (variable
+atom = lexeme $
+       variable
    <|> flag
    <|> stringLiteral
    <|> interp
    <|> typedBareword
    <|> symbol
    <|> bareword
-   )<< inlineWhitespace
 
 block :: Parser Term
 block = fmap Block blockBody <?> "lambda"
   where
     blockBody = do
-      char '[' >> whitespace
+      lexeme (char '[') >> many eol
       args <- option [] argSpec
       body <- code
-      char ']' >> inlineWhitespace
+      lexeme (char ']')
       return (args, body)
 
     argSpec :: Parser [Pattern]
     argSpec = do
-      char '|' >> inlineWhitespace
+      lexeme $ char '|'
       list <- many pattern
-      char '|' >> whitespace
+      lexeme (char '|') >> many eol
       return list
 
     flagPat = fmap FlagPattern     $ char '-' >> identifier
@@ -123,24 +123,23 @@ block = fmap Block blockBody <?> "lambda"
       return (Just type_, name)
 
     -- TODO: ellipsis patterns
-    pattern = (flagPat <|> varPat <|> typedPat) << inlineWhitespace
+    pattern = lexeme $ flagPat <|> varPat <|> typedPat
 
 subst :: Parser Term
 subst = fmap Subst parens <?> "substitution"
   where parens = do
-          char '(' >> whitespace
-          prog <- code
-          char ')' >> inlineWhitespace
-          return prog
+          lexeme $ char '('
+          many eol
+          code << (lexeme $ char ')')
 
 code :: Parser Program
 code = fmap Program $ many command << whitespace
 
 target :: Parser Term
-target = char '@' >> inlineWhitespace >> term
+target = lexeme (char '@') >> term
 
 pipe :: Parser Command
-pipe = char '|' >> inlineWhitespace >> command
+pipe = lexeme (char '|') >> command
 
 command :: Parser Command
 command = do
@@ -229,6 +228,9 @@ consolidateInterp ((StringLiteral s1):(StringLiteral s2):tail)
   = consolidateInterp ((StringLiteral (s1 ++ s2)):tail)
 consolidateInterp (x:xs) = x:(consolidateInterp xs)
 consolidateInterp [] = []
+
+lexeme :: Parser a -> Parser a
+lexeme p = p << inlineWhitespace
 
 infixl 1 <<
 (<<) :: (Monad m) => m a -> m b -> m a
