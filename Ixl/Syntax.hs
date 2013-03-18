@@ -207,7 +207,7 @@ interpEscape = StringLiteral . return <$> do
     ch32bit = char 'U' >> hexDigitsChar 8
 
 interpBraces :: Parser [Term]
-interpBraces = makeBraces [
+interpBraces = fmap consolidateInterp $ makeBraces [
   (1,  return . StringLiteral . return <$> char '{'),
   (-1, return . StringLiteral . return <$> char '}'),
   (0,  return <$> interpEscape),
