@@ -4,7 +4,6 @@ module Ixl (
 ) where
 
 import Ixl.Syntax (parseIxl)
-import Ixl.Eval (evalIxl)
 import System.Console.Readline (readline, addHistory)
 import System.Posix (queryTerminal)
 

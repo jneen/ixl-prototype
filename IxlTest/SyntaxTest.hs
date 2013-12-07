@@ -7,39 +7,23 @@ import Text.ParserCombinators.Parsec (ParseError)
 instance Eq ParseError where
   x == y = (show x == show y)
 
-baseCommand = Command {
-  c'target = Nothing,
-  c'pipe = Nothing,
-  c'terms = []
-}
-
-{- --- HELPERS --- -}
-term t = Program [baseCommand { c'terms = [t] }]
-assertLeft x = case x of
-                    Left _ -> assert True
-                    _ -> assert False
-
 main = hspec spec
 
 spec :: Spec
 spec = do
-  describe "interpolation" $ do
-    it "works with a variable" $ do
-      Right (term (Interp [Variable "foo"])) @=?
-        parseIxl "(test)" "\"$foo"
+  describe "definition" $ do
+    it "defines a constant" $ do
+      parseIxl "(test)" "+ x = 1" @=?
+        Right (Program [Let ("x", Apply [Number 1])])
 
-    it "works with a braced variable" $ do
-      Right (term (Interp [Variable "foo"])) @=?
-        parseIxl "(test)" "\"${foo}"
+    it "defines a lambda" $ do
+      parseIxl "(test)" "+ x = [ %y => $y ]" @=?
+        Right (Program [Let ("x",
+          Apply [Lambda [(VariablePattern "y", Apply [Variable "y"])]])])
 
-    it "disallows dollars in braces" $ do
-      assertLeft $ parseIxl "(input)" "\"${$foo}"
+    it "defines a lambda with multiple patterns" $ do
+      parseIxl "(test)" "+ x = [ %y => $y; %z => $z ]" @=?
+        Right (Program [Let ("x",
+          Apply [Lambda [(VariablePattern "y", Apply [Variable "y"]),
+                         (VariablePattern "z", Apply [Variable "z"])]])])
 
-  describe "subst terms" $ do
-    it "works with a single word" $ do
-      Right (term (Subst (term (Bareword "foo")))) @=?
-          parseIxl "(test)" "(foo)"
-
-    it "works in interpolation" $ do
-      Right (term (Interp [Subst (term (Bareword "foo"))])) @=?
-          parseIxl "(test)" "\"$(foo)"
