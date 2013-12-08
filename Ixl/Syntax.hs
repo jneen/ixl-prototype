@@ -6,14 +6,14 @@ module Ixl.Syntax (
   Definition(..),
   Pattern(..),
   Type(..),
-  Program(..),
+  Library(..),
 ) where
 
 import Data.Map ((!))
-import Data.List (intercalate)
+import Data.List (intercalate, foldl1')
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (*>), (<*))
 import Data.Monoid (mempty, (<>), mconcat)
 import Data.Char (chr)
 import Numeric (readHex)
@@ -48,19 +48,18 @@ data Pattern = EnumPattern (Maybe String) String [Pattern]
 data Type = Type Int -- TODO
           deriving(Show, Eq)
 
-data Program = Program [Definition] deriving(Show, Eq)
+data Library = Library [Definition] deriving(Show, Eq)
 
 {---- PARSERS ----}
 
 -- exported function
-parseIxl = parse program
+parseIxl = parse expr
+parseLibrary = parse library
 
 -- main parsers
 
-program :: Parser Program
-program = fmap Program $ code << eof
-
-code = many definition
+library :: Parser Library
+library = Library <$> many definition <* eof
 
 term :: Parser Term
 term = lambda <|> paren <|> atom
@@ -74,7 +73,7 @@ eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
 
 paren = (lexeme (char '(') >> many eol) >> expr << (lexeme (char ')'))
 
-barewordTerminators = " \n\t|#;])}"
+barewordTerminators = " \n\t|=>#;])}"
 
 bare          = many1 $ noneOf barewordTerminators
 auto          = bare
@@ -100,9 +99,14 @@ letExpr = do
   ex <- expr
   return $ Define def ex
 
-expr :: Parser Term
-expr = letExpr <|> (foldl1 Apply <$> many1 term)
 -- TODO: add chains, implicit lambdas, bare exprs, etc
+expr :: Parser Term
+expr = letExpr <|> do
+  segment <- foldl1' Apply <$> many1 term
+  chain <- optionMaybe (lexeme (char '>') *> many eol)
+  case chain of
+       Nothing -> return segment
+       Just _ -> (`Apply` segment) <$> expr
 
 lambda :: Parser Term
 lambda = lbrack >> body << rbrack <?> "lambda"
