@@ -27,7 +27,7 @@ data Term = StringLiteral String
           | Variable String
           | Word String
           | Lambda [(Pattern, Term)]
-          | Apply [Term]
+          | Apply Term Term
           | Pipe Term Term
           | Chain Term Term
           | Define Definition Term
@@ -101,7 +101,7 @@ letExpr = do
   return $ Define def ex
 
 expr :: Parser Term
-expr = letExpr <|> (Apply <$> many term)
+expr = letExpr <|> (foldl1 Apply <$> many1 term)
 -- TODO: add chains, implicit lambdas, bare exprs, etc
 
 lambda :: Parser Term

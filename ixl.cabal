@@ -9,7 +9,7 @@ library
 
 Executable ixl
   Main-is:           Main.hs
-  build-depends: hspec, HUnit, base, mtl, parsec, containers, unix, readline, dlist
+  build-depends: base, mtl, parsec, containers, unix, readline, dlist
 
 Test-Suite test-syntax
   type: exitcode-stdio-1.0

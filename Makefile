@@ -6,7 +6,7 @@ PREFIX ?= $(HOME)/.local
 
 CABAL ?= $(shell which cabal)
 
-BUILD = dist/build/
+BUILD = dist/build/.make
 
 BIN = $(BUILD)/ixl/ixl
 
@@ -21,8 +21,9 @@ clean:
 test: $(BUILD)
 	$(CABAL) test
 
-$(BUILD): Ixl.hs Main.hs $(shell find Ixl -name '*.hs')
+$(BUILD): Ixl.hs Main.hs $(shell find . -name '*.hs')
 	$(CABAL) build
+	touch $@
 
 install: $(BUILD)
 	install -m 0755 $(BIN) $(PREFIX)/bin/ixl
