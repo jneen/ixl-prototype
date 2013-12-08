@@ -53,7 +53,7 @@ data Library = Library [Definition] deriving(Show, Eq)
 {---- PARSERS ----}
 
 -- exported function
-parseIxl = parse expr
+parseIxl = parse (expr <* eof)
 parseLibrary = parse library
 
 -- main parsers
