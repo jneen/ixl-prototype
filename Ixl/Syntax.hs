@@ -65,7 +65,7 @@ term :: Parser Term
 term = lambda <|> paren <|> atom
 
 -- whitespaces and comments
-ws = (many $ (char '\\' *> char '\n') <|> space) *> pure ()
+ws = many ((char '\\' *> char '\n') <|> space) *> pure ()
 ws' = ws <* many eol
 comment = char '#' *> many (noneOf "\n") *> optional (char '\n')
 eol = (comment <|> (oneOf "\n;" *> ws))
