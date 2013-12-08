@@ -36,3 +36,7 @@ spec = do
     it "applies expressions with application chaining" $ do
       parseIxl "(test)" "$z $w > y" @?=
         Right (Apply (Word "y") (Apply (Variable "z") (Variable "w")))
+
+    it "parses a let expression" $ do
+      parseIxl "(test)" "+ x = $y; z" @?=
+        Right (Define (Let "x" (Variable "y")) (Word "z"))

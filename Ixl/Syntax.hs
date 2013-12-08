@@ -33,7 +33,7 @@ data Term = StringLiteral String
           | Define Definition Term
           deriving(Show, Eq)
 
-data Definition = Let (String, Term)
+data Definition = Let String Term
                 | Struct [(String, Type)]
                 | Enum [(String, Type)]
                 deriving(Show, Eq)
@@ -65,13 +65,12 @@ term :: Parser Term
 term = lambda <|> paren <|> atom
 
 -- whitespaces and comments
-inlineWhitespace = (many $ (char '\\' *> char '\n') <|> space) *> pure ()
-whitespace = inlineWhitespace *> many eol
-lexeme p = p <* inlineWhitespace
+ws = (many $ (char '\\' *> char '\n') <|> space) *> pure ()
+ws' = ws <* many eol
 comment = char '#' *> many (noneOf "\n") *> optional (char '\n')
-eol = (comment <|> (oneOf "\n;" *> inlineWhitespace)) *> pure ()
+eol = (comment <|> (oneOf "\n;" *> ws))
 
-paren = (lexeme (char '(') *> many eol) *> expr <* (lexeme (char ')'))
+paren = char '(' *> ws' *> expr <* char ')' <* ws
 
 barewordTerminators = " \n\t|=>#;])}"
 
@@ -88,11 +87,12 @@ number        = Number        <$> read <$> many1 digit
 word          = Word          <$> bare
 
 atom :: Parser Term
-atom = lexeme $
-       variable
-   <|> number
-   <|> stringLiteral
-   <|> word
+atom = (
+    variable
+    <|> number
+    <|> stringLiteral
+    <|> word
+  ) <* ws <?> "an atom"
 
 letExpr = Define <$> definition <*> expr
 
@@ -100,7 +100,7 @@ letExpr = Define <$> definition <*> expr
 expr :: Parser Term
 expr = letExpr <|> do
   segment <- foldl1' Apply <$> many1 term
-  chain <- optionMaybe (lexeme (char '>') *> many eol)
+  chain <- optionMaybe $ char '>' *> ws'
   case chain of
        Nothing -> return segment
        Just _ -> (`Apply` segment) <$> expr
@@ -108,31 +108,21 @@ expr = letExpr <|> do
 lambda :: Parser Term
 lambda = lbrack *> body <* rbrack <?> "lambda"
   where
-    lbrack = lexeme (char '[') *> many eol
-    rbrack = lexeme (char ']')
+    lbrack = char '[' *> ws'
+    rbrack = char ']' *> ws
 
-    arrow = lexeme (string "=>") *> many eol
+    arrow = string "=>" *> ws'
 
     body = Lambda <$> many binding
 
-    binding = do
-      pat <- pattern
-      arrow
-      ex <- expr
-      many eol
-      return (pat, ex)
+    binding = (,) <$> (pattern <* arrow) <*> (expr <* ws')
 
 pattern :: Parser Pattern
 pattern = varPattern <|> enumPattern
 
-varPattern = VariablePattern <$> lexeme (char '%' *> identifier)
+varPattern = VariablePattern <$> (char '%' *> identifier <* ws)
 enumPattern = EnumPattern Nothing <$> (char '.' *> identifier) <*> many pattern
 
 definition :: Parser Definition
-definition = do
-  lexeme (char '+')
-  name <- lexeme identifier
-  lexeme (char '=')
-  val <- expr
-  many eol
-  return $ Let (name, val)
+definition = Let <$> (char '+' *> ws *> identifier <* ws)
+                 <*> (char '=' *> ws *> expr <* ws')
