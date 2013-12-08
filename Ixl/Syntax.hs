@@ -13,7 +13,7 @@ import Data.Map ((!))
 import Data.List (intercalate, foldl1')
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
-import Control.Applicative ((<$>), (*>), (<*), pure)
+import Control.Applicative ((<$>), (*>), (<*), (<*>), pure)
 import Data.Monoid (mempty, (<>), mconcat)
 import Data.Char (chr)
 import Numeric (readHex)
@@ -94,10 +94,7 @@ atom = lexeme $
    <|> stringLiteral
    <|> word
 
-letExpr = do
-  def <- definition
-  ex <- expr
-  return $ Define def ex
+letExpr = Define <$> definition <*> expr
 
 -- TODO: add chains, implicit lambdas, bare exprs, etc
 expr :: Parser Term
@@ -129,10 +126,7 @@ pattern :: Parser Pattern
 pattern = varPattern <|> enumPattern
 
 varPattern = VariablePattern <$> lexeme (char '%' *> identifier)
-enumPattern = do
-  name <- char '.' *> identifier
-  pats <- many pattern
-  return $ EnumPattern Nothing name pats
+enumPattern = EnumPattern Nothing <$> (char '.' *> identifier) <*> many pattern
 
 definition :: Parser Definition
 definition = do
