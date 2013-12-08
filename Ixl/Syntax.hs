@@ -13,7 +13,7 @@ import Data.Map ((!))
 import Data.List (intercalate, foldl1')
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
-import Control.Applicative ((<$>), (*>), (<*))
+import Control.Applicative ((<$>), (*>), (<*), pure)
 import Data.Monoid (mempty, (<>), mconcat)
 import Data.Char (chr)
 import Numeric (readHex)
@@ -65,13 +65,13 @@ term :: Parser Term
 term = lambda <|> paren <|> atom
 
 -- whitespaces and comments
-inlineWhitespace = (many $ (char '\\' >> char '\n') <|> space) >> return ()
-whitespace = inlineWhitespace >> many eol
-lexeme p = p << inlineWhitespace
-comment = char '#' >> many (noneOf "\n") >> optional (char '\n')
-eol = (comment <|> (oneOf "\n;" >> inlineWhitespace)) >> return ()
+inlineWhitespace = (many $ (char '\\' *> char '\n') <|> space) *> pure ()
+whitespace = inlineWhitespace *> many eol
+lexeme p = p <* inlineWhitespace
+comment = char '#' *> many (noneOf "\n") *> optional (char '\n')
+eol = (comment <|> (oneOf "\n;" *> inlineWhitespace)) *> pure ()
 
-paren = (lexeme (char '(') >> many eol) >> expr << (lexeme (char ')'))
+paren = (lexeme (char '(') *> many eol) *> expr <* (lexeme (char ')'))
 
 barewordTerminators = " \n\t|=>#;])}"
 
@@ -80,12 +80,12 @@ auto          = bare
 
 identifier    = many (alphaNum <|> oneOf "_-")
 optIdentifier = try identifier <|> return ""
-symbolic      = char ':' >> identifier
+symbolic      = char ':' *> identifier
 
-stringLiteral = fmap StringLiteral $ char '\'' >> auto
-variable      = fmap Variable      $ char '$'  >> identifier
-number        = fmap Number        $ fmap read $ many1 digit
-word          = fmap Word          $ bare
+stringLiteral = StringLiteral <$> (char '\'' *> auto)
+variable      = Variable      <$> (char '$'  *> identifier)
+number        = Number        <$> read <$> many1 digit
+word          = Word          <$> bare
 
 atom :: Parser Term
 atom = lexeme $
@@ -109,14 +109,14 @@ expr = letExpr <|> do
        Just _ -> (`Apply` segment) <$> expr
 
 lambda :: Parser Term
-lambda = lbrack >> body << rbrack <?> "lambda"
+lambda = lbrack *> body <* rbrack <?> "lambda"
   where
-    lbrack = lexeme (char '[') >> many eol
+    lbrack = lexeme (char '[') *> many eol
     rbrack = lexeme (char ']')
 
-    arrow = lexeme (string "=>") >> many eol
+    arrow = lexeme (string "=>") *> many eol
 
-    body = fmap Lambda $ many binding
+    body = Lambda <$> many binding
 
     binding = do
       pat <- pattern
@@ -128,9 +128,9 @@ lambda = lbrack >> body << rbrack <?> "lambda"
 pattern :: Parser Pattern
 pattern = varPattern <|> enumPattern
 
-varPattern = fmap VariablePattern $ lexeme $ char '%' >> identifier
+varPattern = VariablePattern <$> lexeme (char '%' *> identifier)
 enumPattern = do
-  name <- char '.' >> identifier
+  name <- char '.' *> identifier
   pats <- many pattern
   return $ EnumPattern Nothing name pats
 
@@ -142,7 +142,3 @@ definition = do
   val <- expr
   many eol
   return $ Let (name, val)
-
-infixl 1 <<
-(<<) :: (Monad m) => m a -> m b -> m a
-x << y = do { res <- x; y; return res }
