@@ -10,7 +10,7 @@ BUILD = dist/build/.make
 
 BIN = $(BUILD)/ixl/ixl
 
-CLEAN += $(BUILD)
+CLEAN += $(dir $(BUILD))
 
 .PHONY: all clean test install
 all: $(BUILD)
