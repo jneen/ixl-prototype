@@ -37,6 +37,15 @@ spec = do
       parseIxl "(test)" "$z $w > y" @?=
         Right (Apply (Word "y") (Apply (Variable "z") (Variable "w")))
 
+    it "pipes expressions" $ do
+      parseIxl "(test)" "x y | z w" @?=
+        Right (Pipe (Apply (Word "z") (Word "w")) (Apply (Word "x") (Word "y")))
+
     it "parses a let expression" $ do
       parseIxl "(test)" "+ x = $y; z" @?=
         Right (Define (Let "x" (Variable "y")) (Word "z"))
+
+    it "parses multiple let expression" $ do
+      parseIxl "(test)" "+ x = $a; + y = $b; z" @?=
+        Right (Define (Let "x" (Variable "a"))
+                      (Define (Let "y" (Variable "b")) (Word "z")))

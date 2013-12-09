@@ -66,9 +66,10 @@ term = lambda <|> paren <|> atom
 
 -- whitespaces and comments
 ws = many ((char '\\' *> char '\n') <|> space) *> pure ()
-ws' = ws <* many eol
+ws' = ws <* eols
 comment = char '#' *> many (noneOf "\n") *> optional (char '\n')
 eol = (comment <|> (oneOf "\n;" *> ws))
+eols = many eol *> pure ()
 
 paren = char '(' *> ws' *> expr <* char ')' <* ws
 
@@ -100,10 +101,10 @@ letExpr = Define <$> definition <*> expr
 expr :: Parser Term
 expr = letExpr <|> do
   segment <- foldl1' Apply <$> many1 term
-  chain <- optionMaybe $ char '>' *> ws'
-  case chain of
-       Nothing -> return segment
-       Just _ -> (`Apply` segment) <$> expr
+  appChain segment <|> pipeChain segment <|> pure segment
+
+appChain segment = Apply <$> (char '>' *> ws' *> expr) <*> pure segment
+pipeChain segment = Pipe <$> (char '|' *> ws' *> expr) <*> pure segment
 
 lambda :: Parser Term
 lambda = lbrack *> body <* rbrack <?> "lambda"
@@ -112,10 +113,9 @@ lambda = lbrack *> body <* rbrack <?> "lambda"
     rbrack = char ']' *> ws
 
     arrow = string "=>" *> ws'
-
     body = Lambda <$> many binding
 
-    binding = (,) <$> (pattern <* arrow) <*> (expr <* ws')
+    binding = (,) <$> (pattern <* arrow) <*> (expr <* eols)
 
 pattern :: Parser Pattern
 pattern = varPattern <|> enumPattern
@@ -125,4 +125,4 @@ enumPattern = EnumPattern Nothing <$> (char '.' *> identifier) <*> many pattern
 
 definition :: Parser Definition
 definition = Let <$> (char '+' *> ws *> identifier <* ws)
-                 <*> (char '=' *> ws *> expr <* ws')
+                 <*> (char '=' *> ws' *> expr <* eols)
