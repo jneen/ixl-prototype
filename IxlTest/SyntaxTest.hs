@@ -43,9 +43,9 @@ spec = do
 
     it "parses a let expression" $ do
       parseIxl "(test)" "+ x = $y; z" @?=
-        Right (Define (Let "x" (Variable "y")) (Word "z"))
+        Right (Define [Let "x" (Variable "y")] (Word "z"))
 
     it "parses multiple let expression" $ do
       parseIxl "(test)" "+ x = $a; + y = $b; z" @?=
-        Right (Define (Let "x" (Variable "a"))
-                      (Define (Let "y" (Variable "b")) (Word "z")))
+        Right (Define [(Let "x" (Variable "a")),
+                       (Let "y" (Variable "b"))] (Word "z"))

@@ -22,33 +22,33 @@ import qualified Data.Map as Map
 {---- AST ----}
 
 -- expressions
-data Term = StringLiteral String
-          | Number Int
-          | Variable String
-          | Word String
-          | Lambda [(Pattern, Term)]
-          | Apply Term Term
-          | Pipe Term Term
-          | Chain Term Term
-          | Define Definition Term
-          deriving(Show, Eq)
+data Term a = StringLiteral String
+            | Number Int
+            | Variable a
+            | Word String
+            | Lambda [(Pattern a, Term a)]
+            | Apply (Term a) (Term a)
+            | Pipe (Term a) (Term a)
+            | Chain (Term a) (Term a)
+            | Define [Definition a] (Term a)
+            deriving(Show, Eq)
 
-data Definition = Let String Term
-                | Struct [(String, Type)]
-                | Enum [(String, Type)]
-                deriving(Show, Eq)
+data Definition a = Let a (Term a)
+                  | Struct [(a, Type a)]
+                  | Enum [(a, Type a)]
+                  deriving(Show, Eq)
 
 -- types
 
-data Pattern = EnumPattern (Maybe String) String [Pattern]
-             | StructPattern String [(String, Pattern)]
-             | VariablePattern String
-             deriving(Show, Eq)
+data Pattern a = EnumPattern (Maybe a) a [Pattern a]
+               | StructPattern a [(a, Pattern a)]
+               | VariablePattern a
+               deriving(Show, Eq)
 
-data Type = Type Int -- TODO
-          deriving(Show, Eq)
+data Type a = Type a -- TODO
+              deriving(Show, Eq)
 
-data Library = Library [Definition] deriving(Show, Eq)
+data Library a = Library [Definition a] deriving(Show, Eq)
 
 {---- PARSERS ----}
 
@@ -58,10 +58,10 @@ parseLibrary = parse library
 
 -- main parsers
 
-library :: Parser Library
+library :: Parser (Library String)
 library = Library <$> many definition <* eof
 
-term :: Parser Term
+term :: Parser (Term String)
 term = lambda <|> paren <|> atom
 
 -- whitespaces and comments
@@ -87,7 +87,7 @@ variable      = Variable      <$> (char '$'  *> identifier)
 number        = Number        <$> read <$> many1 digit
 word          = Word          <$> bare
 
-atom :: Parser Term
+atom :: Parser (Term String)
 atom = (
     variable
     <|> number
@@ -95,10 +95,10 @@ atom = (
     <|> word
   ) <* ws <?> "an atom"
 
-letExpr = Define <$> definition <*> expr
+letExpr = Define <$> many1 definition <*> expr
 
 -- TODO: add chains, implicit lambdas, bare exprs, etc
-expr :: Parser Term
+expr :: Parser (Term String)
 expr = letExpr <|> do
   segment <- foldl1' Apply <$> many1 term
   appChain segment <|> pipeChain segment <|> pure segment
@@ -106,7 +106,7 @@ expr = letExpr <|> do
 appChain segment = Apply <$> (char '>' *> ws' *> expr) <*> pure segment
 pipeChain segment = Pipe <$> (char '|' *> ws' *> expr) <*> pure segment
 
-lambda :: Parser Term
+lambda :: Parser (Term String)
 lambda = lbrack *> body <* rbrack <?> "lambda"
   where
     lbrack = char '[' *> ws'
@@ -117,12 +117,12 @@ lambda = lbrack *> body <* rbrack <?> "lambda"
 
     binding = (,) <$> (pattern <* arrow) <*> (expr <* eols)
 
-pattern :: Parser Pattern
+pattern :: Parser (Pattern String)
 pattern = varPattern <|> enumPattern
 
 varPattern = VariablePattern <$> (char '%' *> identifier <* ws)
 enumPattern = EnumPattern Nothing <$> (char '.' *> identifier) <*> many pattern
 
-definition :: Parser Definition
+definition :: Parser (Definition String)
 definition = Let <$> (char '+' *> ws *> identifier <* ws)
                  <*> (char '=' *> ws' *> expr <* eols)
