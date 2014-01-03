@@ -10,7 +10,7 @@ module Ixl.Syntax (
 ) where
 
 import Data.Map ((!))
-import Data.List (intercalate, foldl1')
+import Data.List (intercalate, foldl')
 import Text.ParserCombinators.Parsec
 import Control.Monad.Writer
 import Control.Applicative ((<$>), (*>), (<*), (<*>), pure)
@@ -26,6 +26,7 @@ data Term a = StringLiteral String
             | Number Int
             | Variable a
             | Word String
+            | CommandWord String
             | Lambda [(Pattern a, Term a)]
             | Apply (Term a) (Term a)
             | Pipe (Term a) (Term a)
@@ -100,7 +101,11 @@ letExpr = Define <$> many1 definition <*> expr
 -- TODO: add chains, implicit lambdas, bare exprs, etc
 expr :: Parser (Term String)
 expr = letExpr <|> do
-  segment <- foldl1' Apply <$> many1 term
+  start <- term
+  let command = case start of
+                     Word w -> CommandWord w
+                     _ -> start
+  segment <- foldl' Apply command <$> many term
   appChain segment <|> pipeChain segment <|> pure segment
 
 appChain segment = Apply <$> (char '>' *> ws' *> expr) <*> pure segment

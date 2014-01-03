@@ -27,25 +27,25 @@ spec = do
 
     it "parses applied expressions" $ do
       parseIxl "(test)" "y $z $w" @?=
-        Right (Apply (Apply (Word "y") (Variable "z")) (Variable "w"))
+        Right (Apply (Apply (CommandWord "y") (Variable "z")) (Variable "w"))
 
     it "applies expressions according to parens" $ do
       parseIxl "(test)" "y ($z $w)" @?=
-        Right (Apply (Word "y") (Apply (Variable "z") (Variable "w")))
+        Right (Apply (CommandWord "y") (Apply (Variable "z") (Variable "w")))
 
     it "applies expressions with application chaining" $ do
       parseIxl "(test)" "$z $w > y" @?=
-        Right (Apply (Word "y") (Apply (Variable "z") (Variable "w")))
+        Right (Apply (CommandWord "y") (Apply (Variable "z") (Variable "w")))
 
     it "pipes expressions" $ do
       parseIxl "(test)" "x y | z w" @?=
-        Right (Pipe (Apply (Word "z") (Word "w")) (Apply (Word "x") (Word "y")))
+        Right (Pipe (Apply (CommandWord "z") (Word "w")) (Apply (CommandWord "x") (Word "y")))
 
     it "parses a let expression" $ do
       parseIxl "(test)" "+ x = $y; z" @?=
-        Right (Define [Let "x" (Variable "y")] (Word "z"))
+        Right (Define [Let "x" (Variable "y")] (CommandWord "z"))
 
     it "parses multiple let expression" $ do
       parseIxl "(test)" "+ x = $a; + y = $b; z" @?=
-        Right (Define [(Let "x" (Variable "a")),
-                       (Let "y" (Variable "b"))] (Word "z"))
+        Right (Define [Let "x" (Variable "a"),
+                       Let "y" (Variable "b")] (CommandWord "z"))
