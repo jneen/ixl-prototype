@@ -3,6 +3,7 @@
 
 module Ixl.Syntax (
   parseIxl,
+  parseLibrary,
   Term(..),
   Definition(..),
   Pattern(..),
