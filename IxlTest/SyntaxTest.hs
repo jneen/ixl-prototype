@@ -49,3 +49,11 @@ spec = do
       parseIxl "(test)" "+ x = $a; + y = $b; z" @?=
         Right (Define [Let "x" (Variable "a"),
                        Let "y" (Variable "b")] (CommandWord "z"))
+
+    it "parses tuples" $ do
+      parseIxl "(test)" "foo, bar, baz" @?=
+        Right (Tuple (Word "foo") (Tuple (Word "bar") (Word "baz")))
+
+    it "parses tuples with parens" $ do
+      parseIxl "(test)" "(foo, bar), baz" @?=
+        Right (Tuple (Tuple (Word "foo") (Word "bar")) (Word "baz"))

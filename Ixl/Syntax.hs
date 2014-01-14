@@ -1,4 +1,5 @@
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE NoMonomorphismRestriction, DeriveFunctor, DeriveTraversable, DeriveFoldable #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Ixl.Syntax (
   parseIxl,
@@ -28,6 +29,7 @@ data Term a = StringLiteral String
             | Word String
             | CommandWord String
             | Lambda [(Pattern a, Term a)]
+            | Tuple (Term a) (Term a)
             | Apply (Term a) (Term a)
             | Pipe (Term a) (Term a)
             | Chain (Term a) (Term a)
@@ -63,7 +65,14 @@ library :: Parser (Library String)
 library = Library <$> many definition <* eof
 
 term :: Parser (Term String)
-term = lambda <|> paren <|> atom
+term = do
+  base <- singleTerm
+  optionMaybe (char ',' *> ws) >>= \case
+    Nothing -> return base
+    Just _ -> Tuple <$> return base <*> term
+
+singleTerm :: Parser (Term String)
+singleTerm = lambda <|> paren <|> atom
 
 -- whitespaces and comments
 ws = many ((char '\\' *> char '\n') <|> space) *> pure ()
@@ -74,7 +83,7 @@ eols = many eol *> pure ()
 
 paren = char '(' *> ws' *> expr <* char ')' <* ws
 
-barewordTerminators = " \n\t|=>#;])}"
+barewordTerminators = " \n\t|=>,#;])}"
 
 bare          = many1 $ noneOf barewordTerminators
 auto          = bare
