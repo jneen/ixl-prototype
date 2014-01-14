@@ -3,4 +3,4 @@ module Ixl (
   parseLibrary,
 ) where
 
-import Ixl.Syntax (parseIxl)
+import Ixl.Syntax (parseIxl, parseLibrary)
