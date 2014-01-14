@@ -1,18 +1,21 @@
 name: ixl
 version: 0.0.1
 build-type: Simple
-cabal-version: >= 1.2
+cabal-version: >= 1.18
 
 library
   exposed-modules: Ixl
   build-depends: base, mtl, parsec, containers, dlist
+  default-language: Haskell2010
 
 Executable ixl
   Main-is:           Main.hs
   build-depends: base, mtl, parsec, containers, dlist, unix, readline
+  default-language: Haskell2010
 
 Test-Suite test-syntax
   type: exitcode-stdio-1.0
   main-is: IxlTest/SyntaxTest.hs
   build-depends: hspec, HUnit,
                  base, mtl, parsec, containers, dlist, Cabal >= 1.9.2
+  default-language: Haskell2010
