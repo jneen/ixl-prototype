@@ -32,7 +32,6 @@ data Term a = StringLiteral String
             | Tuple (Term a) (Term a)
             | Apply (Term a) (Term a)
             | Pipe (Term a) (Term a)
-            | Chain (Term a) (Term a)
             | Define [Definition a] (Term a)
             deriving(Show, Eq)
 
