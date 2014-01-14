@@ -14,6 +14,8 @@ module Ixl.Syntax (
 import Data.Map ((!))
 import Data.List (intercalate, foldl')
 import Text.ParserCombinators.Parsec
+import Data.Traversable (Traversable)
+import Data.Foldable (Foldable)
 import Control.Monad.Writer
 import Control.Applicative ((<$>), (*>), (<*), (<*>), pure)
 import Data.Monoid (mempty, (<>), mconcat)
@@ -34,24 +36,25 @@ data Term a = StringLiteral String
             | Apply (Term a) (Term a)
             | Pipe (Term a) (Term a)
             | Define [Definition a] (Term a)
-            deriving(Show, Eq)
+            | Annotated a (Term a)
+            deriving(Show, Eq, Functor, Foldable, Traversable)
 
 data Definition a = Let a (Term a)
                   | Struct [(a, Type a)]
                   | Enum [(a, Type a)]
-                  deriving(Show, Eq)
+                  deriving(Show, Eq, Functor, Foldable, Traversable)
 
 -- types
 
 data Pattern a = EnumPattern (Maybe a) a [Pattern a]
                | StructPattern a [(a, Pattern a)]
                | VariablePattern a
-               deriving(Show, Eq)
+               deriving(Show, Eq, Functor, Foldable, Traversable)
 
-data Type a = Type a -- TODO
-              deriving(Show, Eq)
+data Type a = TyCon a [Type a]
+              deriving(Show, Eq, Functor, Foldable, Traversable)
 
-data Library a = Library [Definition a] deriving(Show, Eq)
+data Library a = Library [Definition a] deriving(Show, Eq, Functor, Foldable, Traversable)
 
 {---- PARSERS ----}
 
