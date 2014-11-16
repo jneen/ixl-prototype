@@ -1,4 +1,4 @@
-## Ixl Language Prototype [![Build Status](https://travis-ci.org/jayferd/ixl-prototype.png)](https://travis-ci.org/jayferd/ixl-prototype)
+## Ixl Language Prototype [![Build Status](https://travis-ci.org/jneen/ixl-prototype.png)](https://travis-ci.org/jneen/ixl-prototype)
 
 Ixl is a general-purpose scripting language that works especially well
 in a REPL.  It will be the scripting language of a new editor called IX.
